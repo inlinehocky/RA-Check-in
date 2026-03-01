@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RA Parts Solutions</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root {
+  --bg:#0f1117; --surface:#181c25; --surface2:#1e2230;
+  --border:#2a2f3f; --border2:#353b50;
+  --gold:#f0b429; --gold-dim:rgba(240,180,41,0.12); --gold-border:rgba(240,180,41,0.3);
+  --teal:#00c9a7; --teal-dim:rgba(0,201,167,0.1);
+  --red:#ff5c5c; --red-dim:rgba(255,92,92,0.1);
+  --text:#e8eaf0; --text2:#9098b1; --text3:#5a6070;
+  --green:#34d399; --green-dim:rgba(52,211,153,0.1);
+  --radius:12px; --shadow:0 4px 24px rgba(0,0,0,0.4);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;
+  background-image:radial-gradient(ellipse 80% 40% at 50% -10%,rgba(240,180,41,0.07) 0%,transparent 70%);}
+.screen{display:none;min-height:100vh;}
+.screen.active{display:flex;flex-direction:column;}
+
+/* LOADING OVERLAY */
+#loading-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;}
+.spinner{width:36px;height:36px;border:3px solid var(--border2);border-top-color:var(--gold);border-radius:50%;animation:spin 0.7s linear infinite;}
+.loading-text{font-size:0.85rem;color:var(--text3);font-style:italic;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* LOGIN */
+#screen-login{align-items:center;justify-content:center;padding:24px;}
+.login-box{width:100%;max-width:400px;background:var(--surface);border:1px solid var(--border);
+  border-radius:18px;padding:40px 36px;box-shadow:var(--shadow);animation:popIn 0.4s cubic-bezier(0.34,1.56,0.64,1);}
+.login-logo{display:flex;align-items:center;gap:10px;margin-bottom:28px;}
+.login-logo-mark{width:42px;height:42px;background:var(--gold);border-radius:10px;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#0f1117;}
+.login-logo h1{font-family:'Fraunces',serif;font-size:1.5rem;font-weight:400;letter-spacing:-0.02em;}
+.login-logo h1 span{color:var(--gold);font-style:italic;}
+.field-label{font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text2);margin-bottom:6px;}
+.field-input{width:100%;background:var(--bg);border:1.5px solid var(--border2);border-radius:9px;
+  padding:12px 16px;color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;font-size:0.95rem;
+  transition:border-color 0.2s,box-shadow 0.2s;margin-bottom:16px;}
+.field-input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-dim);}
+select.field-input{appearance:none;-webkit-appearance:none;margin-bottom:0;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239098b1' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;}
+textarea.field-input{resize:vertical;min-height:88px;margin-bottom:0;font-size:0.9rem;line-height:1.6;}
+.btn-login{width:100%;background:var(--gold);color:#0f1117;border:none;border-radius:9px;padding:13px;
+  font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:0.95rem;cursor:pointer;transition:all 0.18s;margin-top:4px;}
+.btn-login:hover{background:#f5c142;transform:translateY(-1px);box-shadow:0 4px 16px rgba(240,180,41,0.3);}
+.btn-login:disabled{opacity:0.5;cursor:not-allowed;transform:none;}
+.login-error{color:var(--red);font-size:0.82rem;text-align:center;margin-top:12px;min-height:18px;}
+.login-hint{margin-top:20px;font-size:0.75rem;color:var(--text3);text-align:center;font-style:italic;}
+
+/* APP SHELL */
+.topbar{display:flex;align-items:center;gap:12px;padding:14px 24px;background:var(--surface);
+  border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100;flex-shrink:0;}
+.topbar-logo{display:flex;align-items:center;gap:8px;font-family:'Fraunces',serif;font-size:1.1rem;font-weight:400;}
+.topbar-logo-mark{width:30px;height:30px;background:var(--gold);border-radius:7px;
+  display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#0f1117;}
+.topbar-logo span{color:var(--gold);font-style:italic;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.user-badge{font-size:0.78rem;font-weight:600;padding:5px 12px;border-radius:6px;
+  background:var(--surface2);border:1px solid var(--border);color:var(--text2);}
+.user-badge.owner{background:var(--gold-dim);border-color:var(--gold-border);color:var(--gold);}
+.btn-logout{background:none;border:1px solid var(--border2);border-radius:7px;padding:6px 12px;
+  font-family:'Plus Jakarta Sans',sans-serif;font-size:0.75rem;font-weight:600;color:var(--text3);cursor:pointer;transition:all 0.15s;}
+.btn-logout:hover{color:var(--red);border-color:var(--red);}
+.nav-tabs{display:flex;background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;overflow-x:auto;flex-shrink:0;}
+.nav-tab{padding:14px 18px;font-size:0.82rem;font-weight:700;color:var(--text3);cursor:pointer;
+  border-bottom:2px solid transparent;white-space:nowrap;transition:all 0.15s;}
+.nav-tab:hover{color:var(--text);}
+.nav-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
+
+.tab-pane{display:none;}
+.tab-pane.active{display:block;animation:fadeUp 0.3s ease;}
+.tab-pane.map-pane.active{display:flex;flex-direction:column;}
+.tab-scroll{padding:28px 24px;max-width:820px;margin:0 auto;width:100%;}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:24px;margin-bottom:20px;}
+.card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap;}
+.card-title{font-size:0.92rem;font-weight:700;display:flex;align-items:center;gap:8px;}
+.card-sub{font-size:0.78rem;color:var(--text2);margin-top:3px;}
+.divider{height:1px;background:var(--border);margin:20px 0;}
+.section-label{font-size:0.68rem;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px;}
+.form-group{margin-bottom:16px;}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;}
+@media(max-width:520px){.form-row-2{grid-template-columns:1fr;}}
+
+/* QUESTIONS */
+.questions-list{display:flex;flex-direction:column;gap:3px;margin-bottom:12px;}
+.q-row{display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:9px;cursor:pointer;
+  border:1.5px solid transparent;transition:all 0.15s;user-select:none;}
+.q-row:hover{background:var(--surface2);}
+.q-row.ans-yes{background:var(--teal-dim);border-color:rgba(0,201,167,0.25);}
+.q-row.ans-no{background:var(--red-dim);border-color:rgba(255,92,92,0.2);}
+.toggle{width:42px;height:23px;background:var(--border2);border-radius:12px;position:relative;flex-shrink:0;transition:background 0.2s;}
+.toggle::after{content:'';position:absolute;width:17px;height:17px;background:#fff;border-radius:50%;
+  top:3px;left:3px;transition:transform 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3);}
+.ans-yes .toggle{background:var(--teal);}
+.ans-yes .toggle::after{transform:translateX(19px);}
+.ans-no .toggle{background:var(--red);}
+.q-text{flex:1;font-size:0.88rem;line-height:1.45;}
+.q-badge{font-size:0.68rem;font-weight:800;padding:2px 9px;border-radius:4px;letter-spacing:0.08em;min-width:30px;text-align:center;}
+.ans-yes .q-badge{background:var(--teal);color:#0f1117;}
+.ans-no .q-badge{background:var(--red);color:#fff;}
+.q-row:not(.ans-yes):not(.ans-no) .q-badge{background:var(--border2);color:var(--text3);}
+.progress-wrap{height:3px;background:var(--border);border-radius:2px;margin-top:10px;}
+.progress-fill{height:100%;background:var(--gold);border-radius:2px;transition:width 0.4s ease;}
+.progress-label{font-size:0.72rem;color:var(--text3);text-align:right;margin-top:5px;}
+
+/* BUTTONS */
+.btn{font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:0.82rem;padding:9px 18px;
+  border-radius:8px;border:none;cursor:pointer;transition:all 0.15s;letter-spacing:0.02em;
+  display:inline-flex;align-items:center;gap:6px;}
+.btn-primary{background:var(--gold);color:#0f1117;}
+.btn-primary:hover{background:#f5c142;transform:translateY(-1px);}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
+.btn-outline{background:none;border:1.5px solid var(--border2);color:var(--text2);}
+.btn-outline:hover{border-color:var(--text);color:var(--text);}
+.btn-danger{background:none;border:1.5px solid transparent;color:var(--red);}
+.btn-danger:hover{border-color:var(--red);background:var(--red-dim);}
+.btn-teal{background:var(--teal);color:#0f1117;}
+.btn-teal:hover{filter:brightness(1.1);}
+.btn-full{width:100%;justify-content:center;padding:14px;font-size:0.95rem;}
+
+/* MAP BANNER */
+.map-banner{display:flex;align-items:center;gap:12px;padding:14px 16px;
+  background:var(--gold-dim);border:1px solid var(--gold-border);border-radius:10px;margin-bottom:20px;flex-wrap:wrap;}
+.map-banner a{color:var(--gold);font-weight:700;font-size:0.85rem;text-decoration:none;}
+.map-banner a:hover{text-decoration:underline;}
+.map-banner-label{font-size:0.72rem;color:var(--text3);font-style:italic;}
+.no-map-banner{padding:12px 16px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:10px;margin-bottom:20px;font-size:0.8rem;color:var(--text3);font-style:italic;}
+
+/* MAP PANE */
+.map-toolbar{display:flex;align-items:center;gap:10px;padding:12px 20px;
+  background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;}
+.map-url-pill{flex:1;font-size:0.78rem;color:var(--text2);background:var(--bg);border:1px solid var(--border);
+  border-radius:7px;padding:7px 12px;font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.map-ext-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;background:var(--gold);
+  color:#0f1117;border-radius:8px;font-weight:700;font-size:0.82rem;text-decoration:none;white-space:nowrap;transition:all 0.15s;border:none;cursor:pointer;font-family:'Plus Jakarta Sans',sans-serif;}
+.map-ext-btn:hover{background:#f5c142;}
+.map-frame-area{flex:1;position:relative;background:var(--bg);min-height:400px;}
+.map-frame-area iframe{position:absolute;inset:0;width:100%;height:100%;border:none;}
+.map-placeholder{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;min-height:400px;gap:10px;color:var(--text3);font-size:0.88rem;font-style:italic;}
+.map-placeholder-icon{font-size:3rem;}
+
+/* ENTRIES */
+.entry-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px 18px;margin-bottom:10px;animation:fadeIn 0.2s ease;}
+.entry-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap;}
+.entry-biz{font-weight:700;font-size:0.98rem;}
+.entry-meta{font-size:0.72rem;color:var(--text3);margin-top:2px;font-style:italic;}
+.entry-bays{font-size:0.75rem;font-weight:700;padding:3px 10px;border-radius:5px;background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-border);}
+.score-pill{font-size:0.72rem;font-weight:800;padding:4px 10px;border-radius:5px;letter-spacing:0.05em;}
+.score-high{background:var(--green-dim);color:var(--green);}
+.score-med{background:var(--gold-dim);color:var(--gold);}
+.score-low{background:var(--red-dim);color:var(--red);}
+.chips-wrap{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;}
+.chip{font-size:0.68rem;font-weight:700;padding:2px 9px;border-radius:4px;letter-spacing:0.03em;}
+.chip-yes{background:var(--teal-dim);color:var(--teal);}
+.chip-no{background:var(--red-dim);color:var(--red);}
+.entry-notes{font-size:0.8rem;color:var(--text2);font-style:italic;line-height:1.55;
+  background:var(--bg);border-radius:6px;padding:8px 12px;margin-top:6px;border:1px solid var(--border);}
+.empty-state{text-align:center;padding:48px 24px;color:var(--text3);font-size:0.88rem;font-style:italic;}
+
+/* USERS */
+.user-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.user-name-badge{font-weight:700;font-size:0.88rem;padding:4px 12px;border-radius:6px;background:var(--surface2);}
+.user-role-badge{font-size:0.68rem;font-weight:800;padding:2px 8px;border-radius:4px;letter-spacing:0.08em;}
+.role-owner{background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-border);}
+.role-employee{background:var(--border);color:var(--text3);}
+.biz-count{font-size:0.75rem;color:var(--text3);font-style:italic;flex:1;}
+
+/* UPLOAD */
+.upload-zone{border:2px dashed var(--border2);border-radius:10px;padding:24px;text-align:center;
+  cursor:pointer;transition:all 0.2s;background:var(--bg);}
+.upload-zone:hover{border-color:var(--gold);background:var(--gold-dim);}
+.upload-zone.loaded{border-color:var(--teal);border-style:solid;background:var(--teal-dim);}
+.upload-icon{font-size:1.8rem;margin-bottom:6px;}
+.upload-text{font-size:0.83rem;color:var(--text2);}
+.upload-hint{font-size:0.72rem;color:var(--text3);margin-top:3px;font-style:italic;}
+
+/* FILTER */
+.filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+.filter-chip{font-size:0.75rem;font-weight:700;padding:5px 14px;border-radius:6px;cursor:pointer;
+  border:1.5px solid var(--border2);background:none;color:var(--text3);transition:all 0.15s;font-family:'Plus Jakarta Sans',sans-serif;}
+.filter-chip.active{border-color:var(--gold);color:var(--gold);background:var(--gold-dim);}
+
+/* Q EDITOR */
+.q-edit-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border);}
+.q-edit-num{font-size:0.75rem;font-weight:800;color:var(--text3);min-width:22px;}
+.q-edit-text{flex:1;font-size:0.85rem;color:var(--text2);}
+
+/* INLINE FORM */
+.inline-form{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.inline-form .field-input{margin-bottom:0;flex:1;min-width:140px;}
+
+/* TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);
+  background:var(--surface);color:var(--text);border:1px solid var(--border2);
+  padding:11px 22px;border-radius:10px;font-size:0.83rem;font-weight:600;
+  box-shadow:var(--shadow);transition:transform 0.3s ease;z-index:9998;white-space:nowrap;}
+.toast.show{transform:translateX(-50%) translateY(0);}
+
+@keyframes popIn{from{opacity:0;transform:scale(0.94) translateY(8px)}to{opacity:1;transform:none}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+</style>
+</head>
+<body>
+
+<!-- LOADING -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text">Connecting…</div>
+</div>
+
+<!-- LOGIN -->
+<div class="screen" id="screen-login">
+  <div class="login-box">
+    <div class="login-logo">
+      <div class="login-logo-mark">B</div>
+      <h1>RA Parts <span>Solutions</span></h1>
+    </div>
+    <div class="field-label">Username</div>
+    <input class="field-input" type="text" id="login-user" placeholder="Enter username" autocomplete="username">
+    <div class="field-label">Password</div>
+    <input class="field-input" type="password" id="login-pass" placeholder="Enter password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn-login" id="login-btn" onclick="doLogin()">Sign In →</button>
+    <div class="login-error" id="login-error"></div>
+    <div class="login-hint">Contact the owner if you need your login.</div>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="screen" id="screen-app">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <div class="topbar-logo-mark">B</div>RA Parts <span>Solutions</span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-badge" id="topbar-badge"></div>
+      <button class="btn-logout" onclick="doLogout()">Sign Out</button>
+    </div>
+  </div>
+  <div class="nav-tabs" id="nav-tabs"></div>
+
+  <!-- New Entry -->
+  <div class="tab-pane" id="tab-entry">
+    <div class="tab-scroll">
+      <div id="map-banner-yes" class="map-banner" style="display:none;">
+        <span style="font-size:1.2rem;">🗺️</span>
+        <div style="flex:1;">
+          <div class="map-banner-label">Today's route map is ready</div>
+          <a id="map-banner-link" href="#" target="_blank">Open in Google Maps ↗</a>
+        </div>
+        <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;" onclick="showTab('tab-map')">View in App →</button>
+      </div>
+      <div id="map-banner-no" class="no-map-banner" style="display:none;">📍 No route map assigned for today yet.</div>
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">📋 New Check-In</div>
+            <div class="card-sub" id="entry-date-sub"></div>
+          </div>
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <div class="field-label">Business</div>
+            <select class="field-input" id="biz-select"><option value="">— Select —</option></select>
+          </div>
+          <div class="form-group">
+            <div class="field-label">Number of Bays</div>
+            <select class="field-input" id="bays-select">
+              <option value="">— Select —</option>
+              <option value="1-3">1 – 3 Bays</option>
+              <option value="4-6">4 – 6 Bays</option>
+              <option value="7+">7 or More Bays</option>
+            </select>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div class="section-label">Check-In Questions</div>
+        <div class="questions-list" id="questions-list"></div>
+        <div class="progress-wrap"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+        <div class="progress-label" id="prog-label">0 answered</div>
+        <div class="divider"></div>
+        <div class="form-group">
+          <div class="field-label">Notes (optional)</div>
+          <textarea class="field-input" id="entry-notes" placeholder="Observations, issues, follow-ups…"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" id="submit-btn" onclick="submitEntry()">Save Entry ↗</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Route Map -->
+  <div class="tab-pane map-pane" id="tab-map">
+    <div class="map-toolbar">
+      <span style="font-size:0.75rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);">🗺️ Today's Route</span>
+      <div class="map-url-pill" id="map-url-pill">No map link set</div>
+      <a class="map-ext-btn" id="map-ext-link" href="#" target="_blank">↗ Open Full Map</a>
+    </div>
+    <div class="map-frame-area" id="map-frame-area">
+      <div class="map-placeholder">
+        <div class="map-placeholder-icon">🗺️</div>
+        <div>No route map set for today.</div>
+        <div style="font-size:0.75rem;">Ask the owner to add today's Google Maps link.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- All Entries (owner) -->
+  <div class="tab-pane" id="tab-all-entries">
+    <div class="tab-scroll">
+      <div class="card">
+        <div class="card-head">
+          <div class="card-title">📊 All Entries</div>
+          <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
+        </div>
+        <div class="filter-row" id="all-filters"></div>
+        <div id="all-entries-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Employees (owner) -->
+  <div class="tab-pane" id="tab-users">
+    <div class="tab-scroll">
+      <div class="card">
+        <div class="card-head">
+          <div><div class="card-title">👥 Employees</div><div class="card-sub">Manage accounts.</div></div>
+        </div>
+        <div id="users-list"></div>
+        <div class="divider"></div>
+        <div class="section-label">Add New Employee</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <input class="field-input" type="text" id="new-emp-user" placeholder="Username" style="flex:1;min-width:120px;margin-bottom:0;">
+          <input class="field-input" type="password" id="new-emp-pass" placeholder="Password" style="flex:1;min-width:120px;margin-bottom:0;">
+          <button class="btn btn-teal" onclick="addEmployee()">Add</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><div class="card-title">📋 Assign Business List</div><div class="card-sub">Select employee then import or add businesses.</div></div>
+        </div>
+        <div class="section-label">Select employee:</div>
+        <div id="assign-pills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;"></div>
+        <div class="upload-zone" id="upload-zone" onclick="document.getElementById('csv-file').click()">
+          <div class="upload-icon">📄</div>
+          <div class="upload-text">Import CSV (one business per row)</div>
+          <div class="upload-hint">Click to browse</div>
+          <input type="file" id="csv-file" accept=".csv,.txt" onchange="handleCSV(event)">
+        </div>
+        <div class="divider"></div>
+        <div class="section-label">Or add manually:</div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <input class="field-input" type="text" id="manual-biz" placeholder="Business name…" style="flex:1;margin-bottom:0;">
+          <button class="btn btn-outline" onclick="addManualBiz()">Add</button>
+        </div>
+        <div id="manual-biz-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><div class="card-title">🗺️ Daily Route Map</div><div class="card-sub">Paste one Google Maps link per employee. Updates their Route Map tab instantly.</div></div>
+        </div>
+        <div id="map-link-editor"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Questions (owner) -->
+  <div class="tab-pane" id="tab-questions">
+    <div class="tab-scroll">
+      <div class="card">
+        <div class="card-head">
+          <div><div class="card-title">❓ Check-In Questions</div><div class="card-sub">Yes/No questions on every entry form.</div></div>
+        </div>
+        <div id="q-editor-list"></div>
+        <div class="divider"></div>
+        <div style="display:flex;gap:10px;">
+          <input class="field-input" type="text" id="new-q-input" placeholder="Add a question…" style="flex:1;margin-bottom:0;">
+          <button class="btn btn-primary" onclick="addQuestion()">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account (owner) -->
+  <div class="tab-pane" id="tab-account">
+    <div class="tab-scroll">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:16px;">🔐 Change Password</div>
+        <div class="field-label">Username to change</div>
+        <select class="field-input" id="pw-change-user" style="margin-bottom:16px;"></select>
+        <div class="inline-form">
+          <input class="field-input" type="password" id="new-pw" placeholder="New password…">
+          <input class="field-input" type="password" id="new-pw2" placeholder="Confirm…">
+          <button class="btn btn-primary" onclick="changePassword()">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══ SUPABASE ═══
+const SUPA_URL = 'https://kxchucwedudvlqzszqpp.supabase.co';
+const SUPA_KEY = 'sb_publishable_hybvaVDQ4K83yTY-OKjYsQ_zeJTdYz6';
+const { createClient } = supabase;
+const db = createClient(SUPA_URL, SUPA_KEY);
+
+// ═══ STATE ═══
+let currentUser = null;
+let questions = [];
+let answers = {};
+let assignTarget = null;
+let allFilter = 'all';
+let allEntries = [];
+
+// ═══ INIT ═══
+async function init() {
+  showLoading(true);
+  // Quick connectivity check
+  const { error } = await db.from('users').select('id').limit(1);
+  showLoading(false);
+  if (error) {
+    showScreen('screen-login');
+    document.getElementById('login-error').textContent = 'Cannot reach database. Check your connection.';
+    return;
+  }
+  showScreen('screen-login');
+}
+
+function showLoading(on) {
+  document.getElementById('loading-overlay').style.display = on ? 'flex' : 'none';
+}
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ═══ LOGIN ═══
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  if (!u || !p) { document.getElementById('login-error').textContent = 'Enter username and password.'; return; }
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true; btn.textContent = 'Signing in…';
+  const { data, error } = await db.from('users').select('*').eq('username', u).eq('password', p).single();
+  btn.disabled = false; btn.textContent = 'Sign In →';
+  if (error || !data) { document.getElementById('login-error').textContent = 'Incorrect username or password.'; return; }
+  document.getElementById('login-error').textContent = '';
+  currentUser = data;
+  const badge = document.getElementById('topbar-badge');
+  badge.textContent = data.display_name || data.username;
+  badge.className = 'user-badge' + (data.role === 'owner' ? ' owner' : '');
+  showScreen('screen-app');
+  buildNav();
+  document.getElementById('entry-date-sub').textContent =
+    new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  await loadQuestions();
+  showTab('tab-entry');
+}
+
+function doLogout() {
+  currentUser = null; answers = {}; questions = [];
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  showScreen('screen-login');
+}
+
+// ═══ NAV ═══
+function buildNav() {
+  const nav = document.getElementById('nav-tabs'); nav.innerHTML = '';
+  const tabs = currentUser.role === 'owner'
+    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-account','⚙️ Account']]
+    : [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map']];
+  tabs.forEach(([id, label]) => {
+    const b = document.createElement('div');
+    b.className = 'nav-tab'; b.textContent = label; b.dataset.tab = id;
+    b.onclick = () => showTab(id); nav.appendChild(b);
+  });
+}
+
+async function showTab(id) {
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
+  const pane = document.getElementById(id);
+  if (pane) pane.classList.add('active');
+  if (id === 'tab-entry') await resetEntryForm();
+  if (id === 'tab-map') await renderMapPane();
+  if (id === 'tab-all-entries') await renderAllEntries();
+  if (id === 'tab-users') await renderUsersTab();
+  if (id === 'tab-questions') await renderQEditor();
+  if (id === 'tab-account') await renderAccountTab();
+}
+
+// ═══ QUESTIONS ═══
+async function loadQuestions() {
+  const { data } = await db.from('questions').select('*').order('sort_order');
+  questions = data || [];
+}
+
+// ═══ ENTRY FORM ═══
+async function resetEntryForm() {
+  answers = {};
+  document.getElementById('bays-select').value = '';
+  document.getElementById('entry-notes').value = '';
+
+  // Map banner
+  const { data: mapRow } = await db.from('map_links').select('url').eq('username', currentUser.username).single();
+  const url = mapRow?.url || '';
+  document.getElementById('map-banner-yes').style.display = url ? 'flex' : 'none';
+  document.getElementById('map-banner-no').style.display = url ? 'none' : 'block';
+  if (url) document.getElementById('map-banner-link').href = url;
+
+  // Businesses
+  const sel = document.getElementById('biz-select');
+  sel.innerHTML = '<option value="">— Select business —</option>';
+  const { data: bizRows } = await db.from('business_lists').select('business_name').eq('username', currentUser.username).order('business_name');
+  if (bizRows && bizRows.length) {
+    bizRows.forEach(r => { const o = document.createElement('option'); o.value = r.business_name; o.textContent = r.business_name; sel.appendChild(o); });
+  } else {
+    sel.innerHTML = '<option value="">No businesses assigned yet</option>';
+  }
+
+  // Questions
+  const grid = document.getElementById('questions-list'); grid.innerHTML = '';
+  questions.forEach((q, i) => {
+    const row = document.createElement('div');
+    row.className = 'q-row'; row.id = 'qrow-' + i;
+    row.innerHTML = `<div class="toggle"></div><div class="q-text">${q.question}</div><div class="q-badge" id="qbadge-${i}">—</div>`;
+    row.onclick = () => cycleAnswer(i, row); grid.appendChild(row);
+  });
+  updateProgress();
+}
+
+function cycleAnswer(i, row) {
+  if (!row.classList.contains('ans-yes') && !row.classList.contains('ans-no')) {
+    answers[i] = true; row.classList.add('ans-yes'); document.getElementById('qbadge-' + i).textContent = 'YES';
+  } else if (row.classList.contains('ans-yes')) {
+    answers[i] = false; row.classList.remove('ans-yes'); row.classList.add('ans-no'); document.getElementById('qbadge-' + i).textContent = 'NO';
+  } else {
+    delete answers[i]; row.classList.remove('ans-yes', 'ans-no'); document.getElementById('qbadge-' + i).textContent = '—';
+  }
+  updateProgress();
+}
+
+function updateProgress() {
+  const total = questions.length, done = Object.keys(answers).length;
+  document.getElementById('prog-fill').style.width = (total ? done / total * 100 : 0) + '%';
+  document.getElementById('prog-label').textContent = `${done} of ${total} answered`;
+}
+
+async function submitEntry() {
+  const biz = document.getElementById('biz-select').value;
+  const bays = document.getElementById('bays-select').value;
+  const notes = document.getElementById('entry-notes').value.trim();
+  if (!biz) { showToast('Please select a business'); return; }
+  if (!bays) { showToast('Please select number of bays'); return; }
+  if (Object.keys(answers).length < questions.length) { showToast(`Answer all ${questions.length} questions first`); return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const answerPayload = questions.map((q, i) => ({ question: q.question, answer: !!answers[i] }));
+  const { error } = await db.from('entries').insert({
+    username: currentUser.username,
+    display_name: currentUser.display_name || currentUser.username,
+    business: biz, bays, notes,
+    entry_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    entry_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    answers: answerPayload,
+  });
+
+  btn.disabled = false; btn.textContent = 'Save Entry ↗';
+  if (error) { showToast('Error saving — try again'); console.error(error); return; }
+  showToast('Entry saved! ✓');
+  await resetEntryForm();
+}
+
+// ═══ MAP ═══
+async function renderMapPane() {
+  const { data: mapRow } = await db.from('map_links').select('url').eq('username', currentUser.username).single();
+  const url = mapRow?.url || '';
+  document.getElementById('map-url-pill').textContent = url || 'No map link set for today';
+  document.getElementById('map-ext-link').href = url || '#';
+  const area = document.getElementById('map-frame-area');
+  if (!url) {
+    area.innerHTML = `<div class="map-placeholder"><div class="map-placeholder-icon">🗺️</div><div>No route map set for today.</div><div style="font-size:0.75rem;">Ask the owner to add today's Google Maps link.</div></div>`;
+    return;
+  }
+  let embedUrl = url;
+  if (url.includes('/maps/d/')) {
+    embedUrl = url.replace(/\/(viewer|edit).*$/, '/embed');
+  } else {
+    embedUrl = url.includes('output=embed') ? url : url + (url.includes('?') ? '&' : '?') + 'output=embed';
+  }
+  area.innerHTML = `
+    <iframe src="${embedUrl}" allowfullscreen loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div style="position:absolute;bottom:16px;right:16px;z-index:10;">
+      <a href="${url}" target="_blank" class="map-ext-btn" style="box-shadow:0 2px 12px rgba(0,0,0,0.5);">↗ Open Full Map</a>
+    </div>`;
+  area.style.position = 'relative';
+}
+
+// ═══ ALL ENTRIES ═══
+function entryHTML(e) {
+  const ans = e.answers || [];
+  const yes = ans.filter(a => a.answer).length;
+  const pct = ans.length ? Math.round(yes / ans.length * 100) : 0;
+  const sc = pct >= 75 ? 'score-high' : pct >= 40 ? 'score-med' : 'score-low';
+  return `<div class="entry-card">
+    <div class="entry-top">
+      <div><div class="entry-biz">${e.business}</div><div class="entry-meta">${e.display_name} · ${e.entry_date} at ${e.entry_time}</div></div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <div class="entry-bays">🔧 ${e.bays} Bays</div>
+        <div class="score-pill ${sc}">${yes}/${ans.length} YES</div>
+      </div>
+    </div>
+    <div class="chips-wrap">${ans.map(a => `<span class="chip chip-${a.answer ? 'yes' : 'no'}" title="${a.question}">${a.answer ? '✓' : '✗'} ${a.question.length > 34 ? a.question.slice(0, 34) + '…' : a.question}</span>`).join('')}</div>
+    ${e.notes ? `<div class="entry-notes">📝 ${e.notes}</div>` : ''}
+  </div>`;
+}
+
+async function renderAllEntries() {
+  const { data } = await db.from('entries').select('*').order('created_at', { ascending: false });
+  allEntries = data || [];
+  const fc = document.getElementById('all-filters');
+  const emps = [...new Set(allEntries.map(e => e.username))];
+  fc.innerHTML = `<div class="filter-chip${allFilter === 'all' ? ' active' : ''}" onclick="setFilter('all',this)">All</div>` +
+    emps.map(u => {
+      const dn = allEntries.find(e => e.username === u)?.display_name || u;
+      return `<div class="filter-chip${allFilter === u ? ' active' : ''}" onclick="setFilter('${u}',this)">${dn}</div>`;
+    }).join('');
+  const list = allFilter === 'all' ? allEntries : allEntries.filter(e => e.username === allFilter);
+  document.getElementById('all-entries-list').innerHTML = list.length ? list.map(entryHTML).join('') : '<div class="empty-state">No entries yet.</div>';
+}
+
+function setFilter(v, el) {
+  allFilter = v;
+  document.querySelectorAll('#all-filters .filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  const list = v === 'all' ? allEntries : allEntries.filter(e => e.username === v);
+  document.getElementById('all-entries-list').innerHTML = list.length ? list.map(entryHTML).join('') : '<div class="empty-state">No entries found.</div>';
+}
+
+// ═══ EXPORT (OWNER ONLY) ═══
+function exportCSV() {
+  const list = allFilter === 'all' ? allEntries : allEntries.filter(e => e.username === allFilter);
+  if (!list.length) { showToast('No entries to export'); return; }
+  const qHeaders = questions.map(q => q.question);
+  const headers = ['Employee', 'Business', 'Bays', 'Date', 'Time', ...qHeaders, 'Notes'];
+  const rows = list.map(e => [
+    e.display_name, e.business, e.bays, e.entry_date, e.entry_time,
+    ...qHeaders.map(qh => { const a = (e.answers || []).find(a => a.question === qh); return a ? (a.answer ? 'Yes' : 'No') : ''; }),
+    e.notes || ''
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `checkin-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click(); showToast('CSV exported!');
+}
+
+// ═══ USERS TAB ═══
+async function renderUsersTab() {
+  const { data: users } = await db.from('users').select('*').order('role');
+  const ul = document.getElementById('users-list'); ul.innerHTML = '';
+  for (const u of users) {
+    const { count } = await db.from('business_lists').select('*', { count: 'exact', head: true }).eq('username', u.username);
+    const row = document.createElement('div'); row.className = 'user-row';
+    row.innerHTML = `<div class="user-name-badge">${u.display_name || u.username}</div>
+      <div class="user-name-badge" style="font-weight:400;color:var(--text3);font-size:0.78rem">@${u.username}</div>
+      <div class="user-role-badge ${u.role === 'owner' ? 'role-owner' : 'role-employee'}">${u.role}</div>
+      <div class="biz-count">${count || 0} biz${count !== 1 ? 'es' : ''}</div>
+      ${u.role !== 'owner' ? `<button class="btn btn-danger" onclick="removeEmployee('${u.username}')">Remove</button>` : ''}`;
+    ul.appendChild(row);
+  }
+  await renderAssignPills();
+  await renderMapLinkEditor();
+}
+
+async function renderAssignPills() {
+  const c = document.getElementById('assign-pills'); c.innerHTML = '';
+  const { data: emps } = await db.from('users').select('*').eq('role', 'employee');
+  if (!emps || !emps.length) { c.innerHTML = '<span style="font-size:0.8rem;color:var(--text3);font-style:italic;">No employees added yet.</span>'; return; }
+  if (!assignTarget) assignTarget = emps[0].username;
+  emps.forEach(u => {
+    const active = assignTarget === u.username;
+    const p = document.createElement('div');
+    p.style.cssText = `padding:6px 16px;border-radius:20px;font-size:0.82rem;font-weight:700;cursor:pointer;border:2px solid ${active ? 'var(--gold)' : 'var(--border2)'};background:${active ? 'var(--gold-dim)' : 'none'};color:${active ? 'var(--gold)' : 'var(--text2)'};transition:all 0.15s;`;
+    p.textContent = u.display_name || u.username;
+    p.onclick = async () => { assignTarget = u.username; await renderAssignPills(); await renderManualBizList(); resetUploadZone(); };
+    c.appendChild(p);
+  });
+  await renderManualBizList();
+}
+
+function resetUploadZone() {
+  const z = document.getElementById('upload-zone'); z.classList.remove('loaded');
+  z.innerHTML = `<div class="upload-icon">📄</div><div class="upload-text">Import CSV for ${assignTarget}</div><div class="upload-hint">One business name per row</div><input type="file" id="csv-file" accept=".csv,.txt" onchange="handleCSV(event)">`;
+}
+
+async function handleCSV(e) {
+  if (!assignTarget) { showToast('Select an employee first'); return; }
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const lines = ev.target.result.split(/\r?\n/).map(l => l.replace(/^["']|["']$/g, '').trim()).filter(Boolean);
+    // Delete existing and re-insert
+    await db.from('business_lists').delete().eq('username', assignTarget);
+    const inserts = lines.map(b => ({ username: assignTarget, business_name: b }));
+    const { error } = await db.from('business_lists').insert(inserts);
+    if (error) { showToast('Error importing'); return; }
+    const z = document.getElementById('upload-zone'); z.classList.add('loaded');
+    z.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><strong>${lines.length} businesses</strong> imported for ${assignTarget}</div><div class="upload-hint">Click to replace</div><input type="file" id="csv-file" accept=".csv,.txt" onchange="handleCSV(event)">`;
+    await renderManualBizList(); showToast(`${lines.length} businesses imported`);
+  };
+  reader.readAsText(file);
+}
+
+async function addManualBiz() {
+  if (!assignTarget) { showToast('Select an employee first'); return; }
+  const inp = document.getElementById('manual-biz'); const v = inp.value.trim(); if (!v) return;
+  const { error } = await db.from('business_lists').insert({ username: assignTarget, business_name: v });
+  if (error) { showToast('Error adding business'); return; }
+  inp.value = ''; await renderManualBizList(); showToast('Business added');
+}
+
+async function renderManualBizList() {
+  const c = document.getElementById('manual-biz-list'); c.innerHTML = '';
+  if (!assignTarget) return;
+  const { data } = await db.from('business_lists').select('*').eq('username', assignTarget).order('business_name');
+  if (!data || !data.length) { c.innerHTML = '<div style="font-size:0.78rem;color:var(--text3);font-style:italic;padding:4px 0;">No businesses assigned yet.</div>'; return; }
+  data.forEach(row => {
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);';
+    div.innerHTML = `<span style="flex:1;font-size:0.83rem;color:var(--text2);">• ${row.business_name}</span><button class="btn btn-danger" style="padding:3px 8px;font-size:0.72rem;" onclick="removeBiz('${row.id}')">✕</button>`;
+    c.appendChild(div);
+  });
+}
+
+async function removeBiz(id) {
+  await db.from('business_lists').delete().eq('id', id);
+  await renderManualBizList();
+}
+
+async function addEmployee() {
+  const u = document.getElementById('new-emp-user').value.trim();
+  const p = document.getElementById('new-emp-pass').value;
+  if (!u || !p) { showToast('Username and password required'); return; }
+  const { error } = await db.from('users').insert({ username: u, password: p, role: 'employee', display_name: u });
+  if (error) { showToast(error.code === '23505' ? 'Username already taken' : 'Error adding employee'); return; }
+  document.getElementById('new-emp-user').value = '';
+  document.getElementById('new-emp-pass').value = '';
+  await renderUsersTab(); showToast('Employee added');
+}
+
+async function removeEmployee(username) {
+  if (!confirm(`Remove "${username}" and all their data?`)) return;
+  await db.from('business_lists').delete().eq('username', username);
+  await db.from('map_links').delete().eq('username', username);
+  await db.from('users').delete().eq('username', username);
+  if (assignTarget === username) assignTarget = null;
+  await renderUsersTab(); showToast('Employee removed');
+}
+
+// ═══ MAP LINK EDITOR ═══
+async function renderMapLinkEditor() {
+  const c = document.getElementById('map-link-editor'); c.innerHTML = '';
+  const { data: emps } = await db.from('users').select('*').eq('role', 'employee');
+  if (!emps || !emps.length) { c.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;">Add employees first.</div>'; return; }
+  const { data: links } = await db.from('map_links').select('*');
+  const linkMap = Object.fromEntries((links || []).map(l => [l.username, l.url]));
+  emps.forEach(u => {
+    const url = linkMap[u.username] || '';
+    const div = document.createElement('div'); div.style.marginBottom = '20px';
+    div.innerHTML = `
+      <div class="field-label" style="margin-bottom:6px;">📍 Route for <strong>${u.display_name || u.username}</strong></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <input class="field-input" type="url" id="mapinput-${u.username}" placeholder="Paste Google Maps share link…" value="${url}" style="flex:1;min-width:200px;margin-bottom:0;font-size:0.82rem;">
+        <button class="btn btn-primary" onclick="saveMapLink('${u.username}')">Save</button>
+        ${url ? `<button class="btn btn-danger" onclick="clearMapLink('${u.username}')">Clear</button>` : ''}
+      </div>
+      <div style="margin-top:6px;font-size:0.75rem;${url ? 'color:var(--teal)' : 'color:var(--text3);font-style:italic;'}">
+        ${url ? `✓ Link set — <a href="${url}" target="_blank" style="color:var(--teal);">preview ↗</a>` : 'No map set yet.'}
+      </div>`;
+    c.appendChild(div);
+  });
+}
+
+async function saveMapLink(username) {
+  const url = document.getElementById('mapinput-' + username).value.trim();
+  if (!url) { showToast('Paste a Google Maps URL first'); return; }
+  await db.from('map_links').upsert({ username, url }, { onConflict: 'username' });
+  await renderMapLinkEditor(); showToast('Map link saved');
+}
+
+async function clearMapLink(username) {
+  await db.from('map_links').delete().eq('username', username);
+  await renderMapLinkEditor(); showToast('Map link cleared');
+}
+
+// ═══ QUESTIONS ═══
+async function renderQEditor() {
+  await loadQuestions();
+  const c = document.getElementById('q-editor-list'); c.innerHTML = '';
+  questions.forEach((q, i) => {
+    const row = document.createElement('div'); row.className = 'q-edit-row';
+    row.innerHTML = `<div class="q-edit-num">${i + 1}.</div><div class="q-edit-text">${q.question}</div><button class="btn btn-danger" style="padding:4px 8px;font-size:0.72rem;" onclick="removeQuestion(${q.id})">✕</button>`;
+    c.appendChild(row);
+  });
+}
+
+async function addQuestion() {
+  const inp = document.getElementById('new-q-input'); const q = inp.value.trim(); if (!q) return;
+  const maxOrder = questions.length ? Math.max(...questions.map(x => x.sort_order)) + 1 : 1;
+  const { error } = await db.from('questions').insert({ question: q, sort_order: maxOrder });
+  if (error) { showToast('Error adding question'); return; }
+  inp.value = ''; await renderQEditor(); showToast('Question added');
+}
+
+async function removeQuestion(id) {
+  await db.from('questions').delete().eq('id', id);
+  await renderQEditor(); showToast('Question removed');
+}
+
+// ═══ ACCOUNT ═══
+async function renderAccountTab() {
+  const sel = document.getElementById('pw-change-user'); sel.innerHTML = '';
+  const { data: users } = await db.from('users').select('username, display_name').order('role');
+  (users || []).forEach(u => {
+    const o = document.createElement('option'); o.value = u.username;
+    o.textContent = `${u.display_name || u.username} (@${u.username})`; sel.appendChild(o);
+  });
+}
+
+async function changePassword() {
+  const username = document.getElementById('pw-change-user').value;
+  const p1 = document.getElementById('new-pw').value;
+  const p2 = document.getElementById('new-pw2').value;
+  if (!p1) { showToast('Enter a new password'); return; }
+  if (p1 !== p2) { showToast('Passwords do not match'); return; }
+  const { error } = await db.from('users').update({ password: p1 }).eq('username', username);
+  if (error) { showToast('Error updating password'); return; }
+  document.getElementById('new-pw').value = ''; document.getElementById('new-pw2').value = '';
+  showToast(`Password updated for ${username} ✓`);
+}
+
+// ═══ TOAST ═══
+function showToast(msg) {
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+// ═══ START ═══
+init();
+</script>
+</body>
+</html>
