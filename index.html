@@ -439,43 +439,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         <div class="card-head">
           <div><div class="card-title">🏢 Business Directory</div>
             <div class="card-sub">Master list of all businesses.</div></div>
-          <button class="btn btn-outline" onclick="toggleAddBizForm()">+ Add Business</button>
-        </div>
-
-        <!-- Add/Edit form -->
-        <div id="add-biz-form" style="display:none;margin-bottom:18px;">
-          <div class="form-row-2">
-            <div class="form-group"><div class="field-label">Account Number *</div>
-              <input class="field-input" type="text" id="biz-acct" placeholder="e.g. ACC-001" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">Business Name *</div>
-              <input class="field-input" type="text" id="biz-name" placeholder="Business name" style="margin-bottom:0;"></div>
-          </div>
-          <div class="form-row-2">
-            <div class="form-group"><div class="field-label">Contact Name</div>
-              <input class="field-input" type="text" id="biz-contact" placeholder="Contact name" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">Phone</div>
-              <input class="field-input" type="tel" id="biz-phone" placeholder="(555) 000-0000" style="margin-bottom:0;"></div>
-          </div>
-          <div class="form-group"><div class="field-label">Address</div>
-            <input class="field-input" type="text" id="biz-addr" placeholder="Street address" style="margin-bottom:0;"></div>
-          <div class="form-row-3">
-            <div class="form-group"><div class="field-label">City</div>
-              <input class="field-input" type="text" id="biz-city" placeholder="City" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">State</div>
-              <input class="field-input" type="text" id="biz-state" placeholder="State" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">Zip</div>
-              <input class="field-input" type="text" id="biz-zip" placeholder="Zip" style="margin-bottom:0;"></div>
-          </div>
-          <div class="form-row-2">
-            <div class="form-group"><div class="field-label">Email</div>
-              <input class="field-input" type="email" id="biz-email" placeholder="email@business.com" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">Zone</div>
-              <input class="field-input" type="text" id="biz-zone" placeholder="Zone / territory" style="margin-bottom:0;"></div>
-          </div>
-          <div style="display:flex;gap:8px;margin-top:4px;">
-            <button class="btn btn-primary" onclick="saveBusiness()">Save Business</button>
-            <button class="btn btn-outline" onclick="toggleAddBizForm()">Cancel</button>
-          </div>
+          <button class="btn btn-primary" onclick="openBizModal()">+ Add Business</button>
         </div>
 
         <!-- CSV Import -->
@@ -580,6 +544,69 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
     </div>
   </div>
 
+</div>
+
+<!-- BUSINESS ADD / EDIT MODAL -->
+<div class="modal-backdrop" id="biz-modal" onclick="closeBizModal(event)">
+  <div class="modal-sheet" id="biz-modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="biz-modal-title">🏢 Add Business</div>
+    <div class="modal-sub" id="biz-modal-sub">Fill in the details below. Account number and business name are required.</div>
+
+    <div class="form-row-2">
+      <div class="form-group">
+        <div class="field-label">Account Number *</div>
+        <input class="field-input" type="text" id="biz-acct" placeholder="e.g. ACC-001" style="margin-bottom:0;">
+      </div>
+      <div class="form-group">
+        <div class="field-label">Business Name *</div>
+        <input class="field-input" type="text" id="biz-name" placeholder="Business name" style="margin-bottom:0;">
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group">
+        <div class="field-label">Contact Name</div>
+        <input class="field-input" type="text" id="biz-contact" placeholder="Contact person" style="margin-bottom:0;">
+      </div>
+      <div class="form-group">
+        <div class="field-label">Phone</div>
+        <input class="field-input" type="tel" id="biz-phone" placeholder="(555) 000-0000" style="margin-bottom:0;">
+      </div>
+    </div>
+    <div class="form-group">
+      <div class="field-label">Address</div>
+      <input class="field-input" type="text" id="biz-addr" placeholder="Street address" style="margin-bottom:0;">
+    </div>
+    <div class="form-row-3">
+      <div class="form-group">
+        <div class="field-label">City</div>
+        <input class="field-input" type="text" id="biz-city" placeholder="City" style="margin-bottom:0;">
+      </div>
+      <div class="form-group">
+        <div class="field-label">State</div>
+        <input class="field-input" type="text" id="biz-state" placeholder="ST" style="margin-bottom:0;">
+      </div>
+      <div class="form-group">
+        <div class="field-label">Zip</div>
+        <input class="field-input" type="text" id="biz-zip" placeholder="Zip" style="margin-bottom:0;">
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group">
+        <div class="field-label">Email</div>
+        <input class="field-input" type="email" id="biz-email" placeholder="email@business.com" style="margin-bottom:0;">
+      </div>
+      <div class="form-group">
+        <div class="field-label">Zone</div>
+        <input class="field-input" type="text" id="biz-zone" placeholder="Zone / territory" style="margin-bottom:0;">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;margin-top:16px;flex-direction:column;">
+      <button class="btn btn-primary btn-full" id="biz-modal-save-btn" onclick="saveBusiness()">Save Business</button>
+      <button class="btn btn-outline btn-full" onclick="closeBizModal()">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <!-- NEW BUSINESS MODAL -->
@@ -988,34 +1015,69 @@ function exportCSV() {
 }
 
 // ═══ BUSINESS DIRECTORY ═══
+// ═══ BUSINESS MODAL ═══
 let editingBizAcct = null;
-function toggleAddBizForm() {
-  const form = document.getElementById('add-biz-form');
-  const visible = form.style.display !== 'none';
-  form.style.display = visible ? 'none' : 'block';
-  if (!visible) { clearBizForm(); editingBizAcct = null; }
+
+function openBizModal(biz = null) {
+  editingBizAcct = biz ? biz.account_number : null;
+  document.getElementById('biz-modal-title').textContent = biz ? '✏️ Edit Business' : '🏢 Add Business';
+  document.getElementById('biz-modal-sub').textContent = biz
+    ? `Editing: ${biz.business_name} — Account #${biz.account_number}`
+    : 'Fill in the details. Account number and business name are required.';
+
+  document.getElementById('biz-acct').value        = biz?.account_number || '';
+  document.getElementById('biz-acct').readOnly      = !!biz; // lock acct number on edit
+  document.getElementById('biz-acct').style.opacity = biz ? '0.5' : '1';
+  document.getElementById('biz-name').value         = biz?.business_name || '';
+  document.getElementById('biz-contact').value      = biz?.contact_name || '';
+  document.getElementById('biz-phone').value        = biz?.phone || '';
+  document.getElementById('biz-addr').value         = biz?.address || '';
+  document.getElementById('biz-city').value         = biz?.city || '';
+  document.getElementById('biz-state').value        = biz?.state || '';
+  document.getElementById('biz-zip').value          = biz?.zip || '';
+  document.getElementById('biz-email').value        = biz?.email || '';
+  document.getElementById('biz-zone').value         = biz?.zone || '';
+
+  document.getElementById('biz-modal-save-btn').textContent = biz ? 'Save Changes' : 'Save Business';
+  document.getElementById('biz-modal').classList.add('open');
+  setTimeout(() => document.getElementById(biz ? 'biz-name' : 'biz-acct').focus(), 300);
 }
-function clearBizForm() {
-  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-zone'].forEach(id => document.getElementById(id).value = '');
+
+function closeBizModal(e) {
+  if (e && e.target !== document.getElementById('biz-modal')) return;
+  document.getElementById('biz-modal').classList.remove('open');
+  editingBizAcct = null;
 }
+
 async function saveBusiness() {
   const acct = document.getElementById('biz-acct').value.trim();
   const name = document.getElementById('biz-name').value.trim();
-  if (!acct || !name) { showToast('Account number and name required'); return; }
+  if (!acct || !name) { showToast('Account number and name are required'); return; }
+
+  const btn = document.getElementById('biz-modal-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
   const payload = {
-    account_number: acct, business_name: name,
-    contact_name: document.getElementById('biz-contact').value.trim() || null,
-    phone: document.getElementById('biz-phone').value.trim() || null,
-    address: document.getElementById('biz-addr').value.trim() || null,
-    city: document.getElementById('biz-city').value.trim() || null,
-    state: document.getElementById('biz-state').value.trim() || null,
-    zip: document.getElementById('biz-zip').value.trim() || null,
-    email: document.getElementById('biz-email').value.trim() || null,
-    zone: document.getElementById('biz-zone').value.trim() || null,
+    account_number: acct,
+    business_name:  name,
+    contact_name:   document.getElementById('biz-contact').value.trim() || null,
+    phone:          document.getElementById('biz-phone').value.trim() || null,
+    address:        document.getElementById('biz-addr').value.trim() || null,
+    city:           document.getElementById('biz-city').value.trim() || null,
+    state:          document.getElementById('biz-state').value.trim() || null,
+    zip:            document.getElementById('biz-zip').value.trim() || null,
+    email:          document.getElementById('biz-email').value.trim() || null,
+    zone:           document.getElementById('biz-zone').value.trim() || null,
   };
+
   const { error } = await db.from('businesses').upsert(payload, { onConflict: 'account_number' });
-  if (error) { showToast('Error saving business'); console.error(error); return; }
-  toggleAddBizForm(); await renderBusinessDirectory(); showToast('Business saved');
+  btn.disabled = false; btn.textContent = editingBizAcct ? 'Save Changes' : 'Save Business';
+  if (error) { showToast('Error saving — try again'); console.error(error); return; }
+
+  document.getElementById('biz-modal').classList.remove('open');
+  editingBizAcct = null;
+  await renderBusinessDirectory();
+  showToast(editingBizAcct ? 'Business updated' : 'Business added');
 }
 
 // Robust CSV parser — handles Excel exports, quoted fields with commas,
@@ -1160,20 +1222,9 @@ async function renderBusinessDirectory() {
 }
 
 async function editBusiness(acct) {
-  const biz = allBusinesses.find(b => b.account_number === acct); if (!biz) return;
-  editingBizAcct = acct;
-  document.getElementById('biz-acct').value = biz.account_number;
-  document.getElementById('biz-name').value = biz.business_name;
-  document.getElementById('biz-contact').value = biz.contact_name || '';
-  document.getElementById('biz-phone').value = biz.phone || '';
-  document.getElementById('biz-addr').value = biz.address || '';
-  document.getElementById('biz-city').value = biz.city || '';
-  document.getElementById('biz-state').value = biz.state || '';
-  document.getElementById('biz-zip').value = biz.zip || '';
-  document.getElementById('biz-email').value = biz.email || '';
-  document.getElementById('biz-zone').value = biz.zone || '';
-  document.getElementById('add-biz-form').style.display = 'block';
-  document.getElementById('add-biz-form').scrollIntoView({ behavior: 'smooth' });
+  const biz = allBusinesses.find(b => b.account_number === acct);
+  if (!biz) return;
+  openBizModal(biz);
 }
 
 async function deleteBusiness(acct) {
