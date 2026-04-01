@@ -1621,14 +1621,17 @@ async function renderBizAssignList() {
   assignedAccounts = new Set((assigned||[]).map(a=>a.account_number));
   const { data: all } = await db.from('businesses').select('*').order('business_name');
   allBusinesses = all||[];
-  // Populate zone dropdown
+  // Populate zone dropdown from distinct zone values on businesses
   const zSel = document.getElementById('assign-zone-filter');
   const curZone = zSel.value;
   zSel.innerHTML = '<option value="">All Zones</option>';
-  allZones.forEach(z => {
+  const distinctZones = [...new Set(allBusinesses.map(b => b.zone).filter(Boolean))].sort();
+  distinctZones.forEach(zv => {
     const o = document.createElement('option');
-    o.value = z.zone_key;
-    o.textContent = `${z.zone_name} (${z.zone_key})`;
+    o.value = zv;
+    // Try to find a friendly name from zones table where key is a prefix of this value
+    const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+    o.textContent = zObj ? `${zv} — ${zObj.zone_name}` : zv;
     zSel.appendChild(o);
   });
   if (curZone) zSel.value = curZone;
@@ -1639,7 +1642,7 @@ function renderBizAssignListUI() {
   const zoneFilter = document.getElementById('assign-zone-filter').value;
   const c = document.getElementById('biz-assign-list'); c.innerHTML='';
   let filtered = allBusinesses;
-  if (zoneFilter) filtered = filtered.filter(b => b.zone && b.zone.toUpperCase().startsWith(zoneFilter.toUpperCase()));
+  if (zoneFilter) filtered = filtered.filter(b => b.zone === zoneFilter);
   if (search) filtered = filtered.filter(b => b.business_name.toLowerCase().includes(search) || b.account_number.toLowerCase().includes(search));
   if(!filtered.length) { c.innerHTML='<div style="font-size:0.8rem;color:var(--text3);font-style:italic;padding:8px 0;">No businesses found.</div>'; return; }
   const assignedInView = filtered.filter(b => assignedAccounts.has(b.account_number)).length;
@@ -1665,9 +1668,10 @@ async function selectAllInZone(assign) {
   const zoneFilter = document.getElementById('assign-zone-filter').value;
   if (!zoneFilter) { showToast('Select a zone first'); return; }
   if (!assignTarget) { showToast('Select an employee first'); return; }
-  const inZone = allBusinesses.filter(b => b.zone && b.zone.toUpperCase().startsWith(zoneFilter.toUpperCase()));
+  const inZone = allBusinesses.filter(b => b.zone === zoneFilter);
   if (!inZone.length) { showToast('No businesses in this zone'); return; }
-  const label = allZones.find(z=>z.zone_key===zoneFilter)?.zone_name || zoneFilter;
+  const zObj = allZones.find(z => zoneFilter.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+  const label = zObj ? `${zoneFilter} (${zObj.zone_name})` : zoneFilter;
   if (assign) {
     const records = inZone.map(b => ({ username: assignTarget, account_number: b.account_number }));
     for (let i=0; i<records.length; i+=50) {
