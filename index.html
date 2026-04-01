@@ -337,6 +337,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         <div class="card-head">
           <div><div class="card-title">📋 New Visit Check-In</div>
             <div class="card-sub" id="entry-date-sub"></div></div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;" onclick="toggleNewBizPanel()">+ New Business</button>
         </div>
 
         <div class="form-row-2">
@@ -352,45 +353,6 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
               <option value="4-6">4 – 6 Bays</option>
               <option value="7+">7 or More Bays</option>
             </select>
-          </div>
-        </div>
-
-        <!-- Add New Business inline -->
-        <div style="margin-bottom:14px;">
-          <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;" onclick="toggleNewBizPanel()">+ Visiting a new business?</button>
-        </div>
-        <div id="new-biz-panel" style="display:none;background:var(--surface2);border:1px solid var(--gold-border);border-radius:10px;padding:16px;margin-bottom:16px;animation:fadeIn 0.2s ease;">
-          <div style="font-size:0.8rem;font-weight:700;color:var(--gold);margin-bottom:12px;">➕ Add New Business</div>
-          <div class="form-row-2">
-            <div class="form-group"><div class="field-label">Business Name *</div>
-              <input class="field-input" type="text" id="nb-name" placeholder="Business name" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">Business Type *</div>
-              <select class="field-input" id="nb-type" style="margin-bottom:0;">
-                <option value="">— Select —</option>
-                <option value="Mechanical">Mechanical</option>
-                <option value="Collision">Collision</option>
-              </select></div>
-          </div>
-          <div class="form-row-2">
-            <div class="form-group"><div class="field-label">Contact Name</div>
-              <input class="field-input" type="text" id="nb-contact" placeholder="Contact name" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">Phone</div>
-              <input class="field-input" type="tel" id="nb-phone" placeholder="(555) 000-0000" style="margin-bottom:0;"></div>
-          </div>
-          <div class="form-group"><div class="field-label">Address</div>
-            <input class="field-input" type="text" id="nb-addr" placeholder="Street address" style="margin-bottom:0;"></div>
-          <div class="form-row-3">
-            <div class="form-group"><div class="field-label">City</div>
-              <input class="field-input" type="text" id="nb-city" placeholder="City" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">State</div>
-              <input class="field-input" type="text" id="nb-state" placeholder="State" style="margin-bottom:0;"></div>
-            <div class="form-group"><div class="field-label">Zip</div>
-              <input class="field-input" type="text" id="nb-zip" placeholder="Zip" style="margin-bottom:0;"></div>
-          </div>
-          <div style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-bottom:10px;" id="nb-zone-info"></div>
-          <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary" onclick="saveNewBizFromEntry()">Add &amp; Select Business</button>
-            <button class="btn btn-outline" onclick="toggleNewBizPanel()">Cancel</button>
           </div>
         </div>
 
@@ -700,6 +662,46 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 
 </div>
 
+<!-- NEW BUSINESS MODAL -->
+<div id="new-biz-modal" style="display:none;position:fixed;inset:0;z-index:9990;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)toggleNewBizPanel()">
+  <div style="width:100%;max-width:500px;background:var(--surface);border:1px solid var(--gold-border);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto;animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:1rem;font-weight:800;color:var(--gold);">➕ Add New Business</div>
+      <button onclick="toggleNewBizPanel()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <div id="nb-zone-info" style="font-size:0.75rem;color:var(--teal);font-style:italic;margin-bottom:14px;padding:8px 12px;background:var(--teal-dim);border-radius:7px;border:1px solid rgba(0,201,167,0.2);display:none;"></div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Business Name *</div>
+        <input class="field-input" type="text" id="nb-name" placeholder="Business name" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">Business Type *</div>
+        <select class="field-input" id="nb-type" style="margin-bottom:0;">
+          <option value="">— Select —</option>
+          <option value="Mechanical">Mechanical</option>
+          <option value="Collision">Collision</option>
+        </select></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Contact Name</div>
+        <input class="field-input" type="text" id="nb-contact" placeholder="Contact name" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">Phone</div>
+        <input class="field-input" type="tel" id="nb-phone" placeholder="(555) 000-0000" style="margin-bottom:0;"></div>
+    </div>
+    <div class="form-group"><div class="field-label">Address</div>
+      <input class="field-input" type="text" id="nb-addr" placeholder="Street address" style="margin-bottom:0;"></div>
+    <div class="form-row-3">
+      <div class="form-group"><div class="field-label">City</div>
+        <input class="field-input" type="text" id="nb-city" placeholder="City" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">State</div>
+        <input class="field-input" type="text" id="nb-state" placeholder="TX" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">Zip</div>
+        <input class="field-input" type="text" id="nb-zip" placeholder="Zip" style="margin-bottom:0;"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn btn-primary btn-full" id="nb-save-btn" onclick="saveNewBizFromEntry()">Add &amp; Select Business</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -845,20 +847,28 @@ async function loadQuestions(bizType) {
 // ═══ ENTRY FORM ═══
 // ═══ NEW BUSINESS FROM ENTRY FORM ═══
 function toggleNewBizPanel() {
-  const panel = document.getElementById('new-biz-panel');
-  const open = panel.style.display !== 'none';
-  panel.style.display = open ? 'none' : 'block';
-  if (!open) {
+  const modal = document.getElementById('new-biz-modal');
+  const open = modal.style.display === 'flex';
+  if (open) {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  } else {
     // Clear fields
     ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('nb-type').value = '';
-    // Show zone hint from employee's existing assignments
+    // Zone hint
     const zoneKey = detectEmployeeZone();
     const zoneObj = allZones.find(z => z.zone_key === zoneKey);
     const info = document.getElementById('nb-zone-info');
-    info.textContent = zoneObj
-      ? `📍 Business will be assigned to zone: ${zoneObj.zone_name} (${zoneObj.zone_key})`
-      : '📍 Zone will be determined from your assigned businesses.';
+    if (zoneObj) {
+      info.textContent = `📍 Will be added to zone: ${zoneObj.zone_name} (${zoneObj.zone_key})`;
+      info.style.display = 'block';
+    } else {
+      info.style.display = 'none';
+    }
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+    setTimeout(() => document.getElementById('nb-name').focus(), 100);
   }
 }
 
@@ -893,7 +903,7 @@ async function saveNewBizFromEntry() {
   const zoneKey = detectEmployeeZone();
   if (!zoneKey) { showToast('Could not detect zone — make sure businesses are assigned to you'); return; }
 
-  const btn = document.querySelector('#new-biz-panel .btn-primary');
+  const btn = document.getElementById('nb-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
 
   const acctNum = await getNextAccountNumber();
@@ -936,6 +946,7 @@ async function saveNewBizFromEntry() {
   sel.value = acct;
 
   toggleNewBizPanel();
+  document.body.style.overflow = '';
   showToast(`Business "${name}" added with account #${acct} ✓`);
   await onBizChange();
 }
@@ -947,7 +958,8 @@ async function resetEntryForm() {
   document.getElementById('visit-contact-position').value = '';
   document.getElementById('purchase-from-dealer').value = '';
   document.getElementById('entry-notes').value = '';
-  document.getElementById('new-biz-panel').style.display = 'none';
+  document.getElementById('new-biz-modal').style.display = 'none';
+  document.body.style.overflow = '';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-zone').classList.remove('has-photo');
   document.getElementById('photo-zone').querySelector('.upload-icon').style.display = '';
@@ -1260,7 +1272,7 @@ async function renderReportButtons(filteredList) {
     types.forEach(t => {
       const count = reportSettings[t] || (t==='Mechanical'?8:20);
       // Count available unsent entries for this combo
-      const available = allEntries.filter(e => !e.used_in_report_at && e.zone && e.zone.toUpperCase() === z.zone_key.toUpperCase() && e.business_type === t).length;
+      const available = allEntries.filter(e => !e.used_in_report_at && e.zone && e.zone.toUpperCase().startsWith(z.zone_key.toUpperCase()) && e.business_type === t).length;
       const btn = document.createElement('div'); btn.className = 'report-btn';
       btn.innerHTML = `<div class="report-btn-type" style="color:${t==='Mechanical'?'var(--blue)':'var(--red)'}">${t}</div>
         <div class="report-btn-zone">${z.zone_name}</div>
@@ -1285,7 +1297,7 @@ async function generateReport(type, zone, count, available) {
   const { data: pool } = await db.from('entries').select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone)')
     .is('used_in_report_at', null)
     .eq('business_type', type)
-    .filter('zone', 'eq', zone.zone_key);
+    .filter('zone', 'ilike', zone.zone_key + '%');
 
   if (!pool || !pool.length) { showToast('No unsent entries found for this report'); return; }
 
