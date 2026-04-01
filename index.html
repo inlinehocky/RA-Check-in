@@ -355,6 +355,45 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </div>
         </div>
 
+        <!-- Add New Business inline -->
+        <div style="margin-bottom:14px;">
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;" onclick="toggleNewBizPanel()">+ Visiting a new business?</button>
+        </div>
+        <div id="new-biz-panel" style="display:none;background:var(--surface2);border:1px solid var(--gold-border);border-radius:10px;padding:16px;margin-bottom:16px;animation:fadeIn 0.2s ease;">
+          <div style="font-size:0.8rem;font-weight:700;color:var(--gold);margin-bottom:12px;">➕ Add New Business</div>
+          <div class="form-row-2">
+            <div class="form-group"><div class="field-label">Business Name *</div>
+              <input class="field-input" type="text" id="nb-name" placeholder="Business name" style="margin-bottom:0;"></div>
+            <div class="form-group"><div class="field-label">Business Type *</div>
+              <select class="field-input" id="nb-type" style="margin-bottom:0;">
+                <option value="">— Select —</option>
+                <option value="Mechanical">Mechanical</option>
+                <option value="Collision">Collision</option>
+              </select></div>
+          </div>
+          <div class="form-row-2">
+            <div class="form-group"><div class="field-label">Contact Name</div>
+              <input class="field-input" type="text" id="nb-contact" placeholder="Contact name" style="margin-bottom:0;"></div>
+            <div class="form-group"><div class="field-label">Phone</div>
+              <input class="field-input" type="tel" id="nb-phone" placeholder="(555) 000-0000" style="margin-bottom:0;"></div>
+          </div>
+          <div class="form-group"><div class="field-label">Address</div>
+            <input class="field-input" type="text" id="nb-addr" placeholder="Street address" style="margin-bottom:0;"></div>
+          <div class="form-row-3">
+            <div class="form-group"><div class="field-label">City</div>
+              <input class="field-input" type="text" id="nb-city" placeholder="City" style="margin-bottom:0;"></div>
+            <div class="form-group"><div class="field-label">State</div>
+              <input class="field-input" type="text" id="nb-state" placeholder="State" style="margin-bottom:0;"></div>
+            <div class="form-group"><div class="field-label">Zip</div>
+              <input class="field-input" type="text" id="nb-zip" placeholder="Zip" style="margin-bottom:0;"></div>
+          </div>
+          <div style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-bottom:10px;" id="nb-zone-info"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-primary" onclick="saveNewBizFromEntry()">Add &amp; Select Business</button>
+            <button class="btn btn-outline" onclick="toggleNewBizPanel()">Cancel</button>
+          </div>
+        </div>
+
         <!-- Business info shown after selection -->
         <div class="biz-info-card" id="biz-info-card">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
@@ -626,7 +665,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         <div class="divider"></div>
         <div class="section-label">Add Zone</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <input class="field-input" type="text" id="new-zone-key" placeholder="Key (e.g. D)" maxlength="5" style="width:80px;flex:none;margin-bottom:0;">
+          <input class="field-input" type="text" id="new-zone-key" placeholder="Key (e.g. DAL)" style="width:100px;flex:none;margin-bottom:0;">
           <input class="field-input" type="text" id="new-zone-name" placeholder="Zone name (e.g. Dallas)" style="flex:1;min-width:150px;margin-bottom:0;">
           <button class="btn btn-primary" onclick="addZone()">Add Zone</button>
         </div>
@@ -804,6 +843,103 @@ async function loadQuestions(bizType) {
 }
 
 // ═══ ENTRY FORM ═══
+// ═══ NEW BUSINESS FROM ENTRY FORM ═══
+function toggleNewBizPanel() {
+  const panel = document.getElementById('new-biz-panel');
+  const open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if (!open) {
+    // Clear fields
+    ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('nb-type').value = '';
+    // Show zone hint from employee's existing assignments
+    const zoneKey = detectEmployeeZone();
+    const zoneObj = allZones.find(z => z.zone_key === zoneKey);
+    const info = document.getElementById('nb-zone-info');
+    info.textContent = zoneObj
+      ? `📍 Business will be assigned to zone: ${zoneObj.zone_name} (${zoneObj.zone_key})`
+      : '📍 Zone will be determined from your assigned businesses.';
+  }
+}
+
+function detectEmployeeZone() {
+  // Derive zone from the majority of assigned businesses (or first found)
+  if (!assignedBusinesses.length) return null;
+  const zones = assignedBusinesses.map(b => b.zone).filter(Boolean);
+  if (!zones.length) return null;
+  // Return most common zone
+  const freq = {};
+  zones.forEach(z => freq[z] = (freq[z]||0) + 1);
+  return Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+async function getNextAccountNumber() {
+  // Fetch all account numbers, find highest numeric suffix, increment
+  const { data } = await db.from('businesses').select('account_number');
+  const nums = (data || []).map(b => {
+    const m = b.account_number.match(/(\d+)$/);
+    return m ? parseInt(m[1]) : 0;
+  });
+  const next = nums.length ? Math.max(...nums) + 1 : 1;
+  return String(next).padStart(4, '0');
+}
+
+async function saveNewBizFromEntry() {
+  const name = document.getElementById('nb-name').value.trim();
+  const type = document.getElementById('nb-type').value;
+  if (!name) { showToast('Business name is required'); return; }
+  if (!type) { showToast('Please select a business type'); return; }
+
+  const zoneKey = detectEmployeeZone();
+  if (!zoneKey) { showToast('Could not detect zone — make sure businesses are assigned to you'); return; }
+
+  const btn = document.querySelector('#new-biz-panel .btn-primary');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const acctNum = await getNextAccountNumber();
+  const acct = acctNum;
+
+  const payload = {
+    account_number: acct,
+    business_name: name,
+    business_type: type,
+    zone: zoneKey,
+    contact_name: document.getElementById('nb-contact').value.trim() || null,
+    phone: document.getElementById('nb-phone').value.trim() || null,
+    address: document.getElementById('nb-addr').value.trim() || null,
+    city: document.getElementById('nb-city').value.trim() || null,
+    state: document.getElementById('nb-state').value.trim() || null,
+    zip: document.getElementById('nb-zip').value.trim() || null,
+  };
+
+  const { error: bizError } = await db.from('businesses').insert(payload);
+  btn.disabled = false; btn.textContent = 'Add & Select Business';
+  if (bizError) {
+    showToast(bizError.code === '23505' ? 'Account number conflict — try again' : 'Error saving business');
+    console.error(bizError); return;
+  }
+
+  // Assign to current employee
+  await db.from('business_assignments').upsert(
+    { username: currentUser.username, account_number: acct },
+    { onConflict: 'username,account_number' }
+  );
+
+  // Add to local list and select it
+  assignedBusinesses.push(payload);
+  assignedBusinesses.sort((a,b) => a.business_name.localeCompare(b.business_name));
+
+  const sel = document.getElementById('biz-select');
+  const o = document.createElement('option');
+  o.value = acct; o.textContent = `${name} (${acct})`;
+  sel.appendChild(o);
+  sel.value = acct;
+
+  toggleNewBizPanel();
+  showToast(`Business "${name}" added with account #${acct} ✓`);
+  await onBizChange();
+}
+
 async function resetEntryForm() {
   answers = {}; selectedPhoto = null; selectedBiz = null;
   document.getElementById('bays-select').value = '';
@@ -811,6 +947,7 @@ async function resetEntryForm() {
   document.getElementById('visit-contact-position').value = '';
   document.getElementById('purchase-from-dealer').value = '';
   document.getElementById('entry-notes').value = '';
+  document.getElementById('new-biz-panel').style.display = 'none';
   document.getElementById('photo-preview').style.display = 'none';
   document.getElementById('photo-zone').classList.remove('has-photo');
   document.getElementById('photo-zone').querySelector('.upload-icon').style.display = '';
@@ -1123,7 +1260,7 @@ async function renderReportButtons(filteredList) {
     types.forEach(t => {
       const count = reportSettings[t] || (t==='Mechanical'?8:20);
       // Count available unsent entries for this combo
-      const available = allEntries.filter(e => !e.used_in_report_at && e.zone && e.zone.toUpperCase().startsWith(z.zone_key.toUpperCase()) && e.business_type === t).length;
+      const available = allEntries.filter(e => !e.used_in_report_at && e.zone && e.zone.toUpperCase() === z.zone_key.toUpperCase() && e.business_type === t).length;
       const btn = document.createElement('div'); btn.className = 'report-btn';
       btn.innerHTML = `<div class="report-btn-type" style="color:${t==='Mechanical'?'var(--blue)':'var(--red)'}">${t}</div>
         <div class="report-btn-zone">${z.zone_name}</div>
@@ -1148,7 +1285,7 @@ async function generateReport(type, zone, count, available) {
   const { data: pool } = await db.from('entries').select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone)')
     .is('used_in_report_at', null)
     .eq('business_type', type)
-    .filter('zone', 'ilike', zone.zone_key + '%');
+    .filter('zone', 'eq', zone.zone_key);
 
   if (!pool || !pool.length) { showToast('No unsent entries found for this report'); return; }
 
