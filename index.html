@@ -565,14 +565,21 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div class="card">
         <div class="card-head">
           <div><div class="card-title">📋 Assign Businesses</div>
-            <div class="card-sub">Select employee then assign businesses for today's visits.</div></div>
+            <div class="card-sub">Select employee, filter by zone, then assign businesses.</div></div>
         </div>
         <div class="section-label">Select employee:</div>
         <div id="assign-pills" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;">
+          <select class="field-input" id="assign-zone-filter" style="margin-bottom:0;flex:1;min-width:160px;" onchange="renderBizAssignListUI()">
+            <option value="">All Zones</option>
+          </select>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:7px 14px;white-space:nowrap;" onclick="selectAllInZone(true)">✓ Assign All in Zone</button>
+          <button class="btn btn-danger" style="font-size:0.75rem;padding:7px 14px;white-space:nowrap;" onclick="selectAllInZone(false)">✕ Remove All in Zone</button>
+        </div>
         <div id="assign-biz-search" style="margin-bottom:12px;">
           <input class="field-input" type="text" id="biz-search-input" placeholder="Search businesses…" style="margin-bottom:0;" oninput="renderBizAssignListUI()">
         </div>
-        <div id="biz-assign-list" style="max-height:300px;overflow-y:auto;"></div>
+        <div id="biz-assign-list" style="max-height:360px;overflow-y:auto;"></div>
       </div>
 
       <div class="card">
@@ -1614,13 +1621,32 @@ async function renderBizAssignList() {
   assignedAccounts = new Set((assigned||[]).map(a=>a.account_number));
   const { data: all } = await db.from('businesses').select('*').order('business_name');
   allBusinesses = all||[];
+  // Populate zone dropdown
+  const zSel = document.getElementById('assign-zone-filter');
+  const curZone = zSel.value;
+  zSel.innerHTML = '<option value="">All Zones</option>';
+  allZones.forEach(z => {
+    const o = document.createElement('option');
+    o.value = z.zone_key;
+    o.textContent = `${z.zone_name} (${z.zone_key})`;
+    zSel.appendChild(o);
+  });
+  if (curZone) zSel.value = curZone;
   renderBizAssignListUI();
 }
 function renderBizAssignListUI() {
   const search = document.getElementById('biz-search-input').value.toLowerCase();
+  const zoneFilter = document.getElementById('assign-zone-filter').value;
   const c = document.getElementById('biz-assign-list'); c.innerHTML='';
-  const filtered = allBusinesses.filter(b=>!search||b.business_name.toLowerCase().includes(search)||b.account_number.toLowerCase().includes(search));
+  let filtered = allBusinesses;
+  if (zoneFilter) filtered = filtered.filter(b => b.zone && b.zone.toUpperCase().startsWith(zoneFilter.toUpperCase()));
+  if (search) filtered = filtered.filter(b => b.business_name.toLowerCase().includes(search) || b.account_number.toLowerCase().includes(search));
   if(!filtered.length) { c.innerHTML='<div style="font-size:0.8rem;color:var(--text3);font-style:italic;padding:8px 0;">No businesses found.</div>'; return; }
+  const assignedInView = filtered.filter(b => assignedAccounts.has(b.account_number)).length;
+  const summary = document.createElement('div');
+  summary.style.cssText = 'font-size:0.72rem;color:var(--text3);padding:6px 2px 10px;font-style:italic;';
+  summary.textContent = `${assignedInView} of ${filtered.length} assigned`;
+  c.appendChild(summary);
   filtered.forEach(b => {
     const checked = assignedAccounts.has(b.account_number);
     const zoneName = allZones.find(z=>z.zone_key===b.zone)?.zone_name||b.zone||'';
@@ -1629,11 +1655,34 @@ function renderBizAssignListUI() {
     row.innerHTML=`<input type="checkbox" id="chk-${b.account_number}" ${checked?'checked':''} style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer;">
       <label for="chk-${b.account_number}" style="flex:1;cursor:pointer;">
         <div style="font-size:0.85rem;font-weight:600;">${b.business_name} ${b.business_type?`<span style="font-size:0.65rem;font-weight:800;color:${b.business_type==='Mechanical'?'var(--blue)':'var(--red)'}">${b.business_type}</span>`:''}</div>
-        <div style="font-size:0.7rem;color:var(--text3);">#${b.account_number} ${b.city?'· '+b.city:''} ${zoneName?'· Zone: '+zoneName:''}</div>
+        <div style="font-size:0.7rem;color:var(--text3);">#${b.account_number} ${b.city?'· '+b.city:''} ${zoneName?'· '+zoneName:''}</div>
       </label>`;
     row.querySelector('input').onchange=(e)=>toggleAssignment(b.account_number,e.target.checked);
     c.appendChild(row);
   });
+}
+async function selectAllInZone(assign) {
+  const zoneFilter = document.getElementById('assign-zone-filter').value;
+  if (!zoneFilter) { showToast('Select a zone first'); return; }
+  if (!assignTarget) { showToast('Select an employee first'); return; }
+  const inZone = allBusinesses.filter(b => b.zone && b.zone.toUpperCase().startsWith(zoneFilter.toUpperCase()));
+  if (!inZone.length) { showToast('No businesses in this zone'); return; }
+  const label = allZones.find(z=>z.zone_key===zoneFilter)?.zone_name || zoneFilter;
+  if (assign) {
+    const records = inZone.map(b => ({ username: assignTarget, account_number: b.account_number }));
+    for (let i=0; i<records.length; i+=50) {
+      await db.from('business_assignments').upsert(records.slice(i,i+50), { onConflict: 'username,account_number' });
+    }
+    inZone.forEach(b => assignedAccounts.add(b.account_number));
+    showToast(`✓ All ${inZone.length} ${label} businesses assigned`);
+  } else {
+    for (const b of inZone) {
+      await db.from('business_assignments').delete().eq('username', assignTarget).eq('account_number', b.account_number);
+      assignedAccounts.delete(b.account_number);
+    }
+    showToast(`Removed all ${inZone.length} ${label} businesses`);
+  }
+  renderBizAssignListUI();
 }
 async function toggleAssignment(acct, assign) {
   if(assign) { await db.from('business_assignments').upsert({username:assignTarget,account_number:acct},{onConflict:'username,account_number'}); assignedAccounts.add(acct); }
