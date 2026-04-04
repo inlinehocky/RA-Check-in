@@ -1723,7 +1723,7 @@ async function importBusinessCSV(e) {
   reader.onload = async ev => {
     try {
       const rows = parseCSV(ev.target.result);
-      if (rows.length < 2) { showToast('File appears empty or has only a header row'); resetUploadZoneBiz(); return; }
+      if (rows.length < 2) { showToast('File appears empty or has only a header row', true); resetUploadZoneBiz(); return; }
       const headers = rows[0].map(h=>h.toLowerCase().trim().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,''));
       const col = (names) => { for(const n of names){const idx=headers.indexOf(n);if(idx!==-1)return idx;} return -1; };
       const colMap = {
@@ -1740,7 +1740,7 @@ async function importBusinessCSV(e) {
         latitude: col(['latitude','lat']),
         longitude: col(['longitude','lng','lon','long']),
       };
-      if (colMap.account_number===-1||colMap.business_name===-1) { showToast('Could not find account_number or business_name columns'); resetUploadZoneBiz(); return; }
+      if (colMap.account_number===-1||colMap.business_name===-1) { showToast('Could not find account_number or business_name columns', true); resetUploadZoneBiz(); return; }
       const records = [];
       for (let i=1;i<rows.length;i++) {
         const r=rows[i]; const get=(col)=>col!==-1&&r[col]?r[col].trim()||null:null;
@@ -1749,12 +1749,12 @@ async function importBusinessCSV(e) {
         if(!acct||!name) continue;
         records.push({account_number:acct,business_name:name,address:get(colMap.address),city:get(colMap.city),state:get(colMap.state),zip:get(colMap.zip),phone:get(colMap.phone),email:get(colMap.email),contact_name:get(colMap.contact_name),zone:get(colMap.zone),business_type:get(colMap.business_type),latitude:getNum(colMap.latitude),longitude:getNum(colMap.longitude)});
       }
-      if (!records.length) { showToast('No valid rows found — check account_number and business_name columns'); resetUploadZoneBiz(); return; }
+      if (!records.length) { showToast('No valid rows found — check account_number and business_name columns', true); resetUploadZoneBiz(); return; }
       for (let i=0;i<records.length;i+=50) {
         const { error } = await db.from('businesses').upsert(records.slice(i,i+50), {onConflict:'account_number'});
         if (error) {
           console.error('Supabase upsert error:', error);
-          showToast(`DB error: ${error.message}`);
+          showToast(`DB error: ${error.message}`, true);
           resetUploadZoneBiz(); return;
         }
       }
@@ -1764,11 +1764,11 @@ async function importBusinessCSV(e) {
       z2.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><strong>${records.length} businesses</strong> imported</div><div class="upload-hint">Click to import again</div>`;
     } catch(err) {
       console.error('CSV import error:', err);
-      showToast('Error reading file — check console for details');
+      showToast('Error reading file — check console for details', true);
       resetUploadZoneBiz();
     }
   };
-  reader.onerror=()=>{ showToast('Could not read file'); resetUploadZoneBiz(); };
+  reader.onerror=()=>{ showToast('Could not read file', true); resetUploadZoneBiz(); };
   reader.readAsText(file,'UTF-8');
 }
 function resetUploadZoneBiz() {
@@ -2154,9 +2154,32 @@ async function grClearFlagOnly() {
 }
 
 // ═══ TOAST ═══
-function showToast(msg) {
-  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2800);
+function showToast(msg, isError) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  // Clear any existing timer
+  if (t._timer) clearTimeout(t._timer);
+  if (isError) {
+    // Error toasts stay until clicked
+    t.style.cursor = 'pointer';
+    t.style.borderColor = 'var(--red)';
+    t.style.color = 'var(--red)';
+    t.title = 'Click to dismiss';
+    t.onclick = () => {
+      t.classList.remove('show');
+      t.style.cursor = '';
+      t.style.borderColor = '';
+      t.style.color = '';
+      t.onclick = null;
+    };
+  } else {
+    t.style.cursor = '';
+    t.style.borderColor = '';
+    t.style.color = '';
+    t.onclick = null;
+    t._timer = setTimeout(() => t.classList.remove('show'), 2800);
+  }
 }
 
 init();
