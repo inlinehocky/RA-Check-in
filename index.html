@@ -1028,6 +1028,8 @@ async function captureGPSForNewBiz() {
     showToast('Could not get GPS location');
   }
 }
+
+async function saveNewBizFromEntry() {
   const name = document.getElementById('nb-name').value.trim();
   const type = document.getElementById('nb-type').value;
   if (!name) { showToast('Business name is required'); return; }
