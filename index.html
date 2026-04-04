@@ -544,12 +544,12 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </div>
 
         <!-- CSV Import -->
-        <div class="upload-zone" id="biz-upload-zone" onclick="document.getElementById('biz-csv').click()" style="margin-bottom:16px;">
+        <label for="biz-csv" class="upload-zone" id="biz-upload-zone" style="margin-bottom:16px;display:block;cursor:pointer;">
           <div class="upload-icon">📄</div>
           <div class="upload-text">Import businesses from CSV</div>
-          <div class="upload-hint">Columns: account_number, business_name, address, city, state, zip, phone, email, contact_name, zone, business_type</div>
-          <input type="file" id="biz-csv" accept=".csv,.txt" style="display:none;" onchange="importBusinessCSV(event)">
-        </div>
+          <div class="upload-hint">Columns: account_number, business_type, business_name, address, city, state, zip, phone, email, contact_name, zone, latitude, longitude</div>
+        </label>
+        <input type="file" id="biz-csv" accept=".csv,.txt" style="display:none;" onchange="importBusinessCSV(event)">
 
         <div id="biz-directory-list"></div>
       </div>
@@ -1749,22 +1749,33 @@ async function importBusinessCSV(e) {
         if(!acct||!name) continue;
         records.push({account_number:acct,business_name:name,address:get(colMap.address),city:get(colMap.city),state:get(colMap.state),zip:get(colMap.zip),phone:get(colMap.phone),email:get(colMap.email),contact_name:get(colMap.contact_name),zone:get(colMap.zone),business_type:get(colMap.business_type),latitude:getNum(colMap.latitude),longitude:getNum(colMap.longitude)});
       }
-      if (!records.length) { showToast('No valid rows found'); resetUploadZoneBiz(); return; }
+      if (!records.length) { showToast('No valid rows found — check account_number and business_name columns'); resetUploadZoneBiz(); return; }
       for (let i=0;i<records.length;i+=50) {
         const { error } = await db.from('businesses').upsert(records.slice(i,i+50), {onConflict:'account_number'});
-        if (error) { showToast(`Error on row ~${i+1}: ${error.message}`); resetUploadZoneBiz(); return; }
+        if (error) {
+          console.error('Supabase upsert error:', error);
+          showToast(`DB error: ${error.message}`);
+          resetUploadZoneBiz(); return;
+        }
       }
       await renderBusinessDirectory(); showToast(`✓ ${records.length} businesses imported`);
-      z.classList.add('loaded');
-      z.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><strong>${records.length} businesses</strong> imported</div><div class="upload-hint">Click to import again</div><input type="file" id="biz-csv" accept=".csv,.txt" style="display:none;" onchange="importBusinessCSV(event)">`;
-    } catch(err) { console.error(err); showToast('Error reading file'); resetUploadZoneBiz(); }
+      const z2 = document.getElementById('biz-upload-zone');
+      z2.classList.add('loaded');
+      z2.innerHTML = `<div class="upload-icon">✅</div><div class="upload-text"><strong>${records.length} businesses</strong> imported</div><div class="upload-hint">Click to import again</div>`;
+    } catch(err) {
+      console.error('CSV import error:', err);
+      showToast('Error reading file — check console for details');
+      resetUploadZoneBiz();
+    }
   };
   reader.onerror=()=>{ showToast('Could not read file'); resetUploadZoneBiz(); };
   reader.readAsText(file,'UTF-8');
 }
 function resetUploadZoneBiz() {
-  const z=document.getElementById('biz-upload-zone'); z.classList.remove('loaded');
-  z.innerHTML=`<div class="upload-icon">📄</div><div class="upload-text">Import businesses from CSV</div><div class="upload-hint">Columns: account_number, business_name, address, city, state, zip, phone, email, contact_name, zone, business_type</div><input type="file" id="biz-csv" accept=".csv,.txt" style="display:none;" onchange="importBusinessCSV(event)">`;
+  document.getElementById('biz-csv').value = '';
+  const z = document.getElementById('biz-upload-zone');
+  z.classList.remove('loaded');
+  z.innerHTML = `<div class="upload-icon">📄</div><div class="upload-text">Import businesses from CSV</div><div class="upload-hint">Columns: account_number, business_type, business_name, address, city, state, zip, phone, email, contact_name, zone, latitude, longitude</div>`;
 }
 
 async function renderBusinessDirectory() {
