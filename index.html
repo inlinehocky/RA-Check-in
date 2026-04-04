@@ -368,6 +368,10 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <div class="biz-info-row"><strong>📍 Address</strong><span id="biz-info-addr"></span></div>
           <div class="biz-info-row"><strong>📞 Phone</strong><span id="biz-info-phone"></span></div>
           <div class="biz-info-row" id="biz-info-contact-row"><strong>👤 Contact</strong><span id="biz-info-contact"></span></div>
+          <div style="margin-top:10px;">
+            <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;" id="last-visit-btn" onclick="openLastVisitModal()" style="display:none;">🕐 View Last Visit</button>
+            <span id="last-visit-none" style="font-size:0.72rem;color:var(--text3);font-style:italic;display:none;">No previous visits recorded.</span>
+          </div>
         </div>
 
         <div class="form-row-2">
@@ -526,6 +530,12 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
                 <option value="Collision">Collision</option>
               </select></div>
           </div>
+          <div class="form-row-2">
+            <div class="form-group"><div class="field-label">Latitude</div>
+              <input class="field-input" type="number" step="any" id="biz-lat" placeholder="e.g. 32.7767" style="margin-bottom:0;"></div>
+            <div class="form-group"><div class="field-label">Longitude</div>
+              <input class="field-input" type="number" step="any" id="biz-lng" placeholder="e.g. -96.7970" style="margin-bottom:0;"></div>
+          </div>
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button class="btn btn-primary" onclick="saveBusiness()">Save Business</button>
             <button class="btn btn-outline" onclick="toggleAddBizForm()">Cancel</button>
@@ -669,6 +679,57 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 
 </div>
 
+<!-- LAST VISIT MODAL -->
+<div id="last-visit-modal" style="display:none;position:fixed;inset:0;z-index:9985;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeLastVisitModal()">
+  <div style="width:100%;max-width:560px;background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto;animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div>
+        <div style="font-size:1rem;font-weight:800;">🕐 Last Visit</div>
+        <div id="lv-meta" style="font-size:0.72rem;color:var(--text3);margin-top:3px;font-style:italic;"></div>
+      </div>
+      <button onclick="closeLastVisitModal()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;line-height:1;">✕</button>
+    </div>
+
+    <!-- Photo -->
+    <div id="lv-photo-wrap" style="display:none;margin-bottom:16px;">
+      <img id="lv-photo" src="" alt="Visit photo" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">
+    </div>
+
+    <!-- Info grid -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;">
+        <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Visit Contact</div>
+        <div id="lv-contact" style="font-size:0.85rem;font-weight:600;"></div>
+        <div id="lv-position" style="font-size:0.75rem;color:var(--text2);margin-top:2px;"></div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;">
+        <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Service Bays</div>
+        <div id="lv-bays" style="font-size:0.85rem;font-weight:600;"></div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;">
+        <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Dealer Purchases</div>
+        <div id="lv-dealer" style="font-size:0.85rem;font-weight:600;"></div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;">
+        <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Visited By</div>
+        <div id="lv-employee" style="font-size:0.85rem;font-weight:600;"></div>
+      </div>
+    </div>
+
+    <!-- Q&A -->
+    <div id="lv-qa-wrap" style="margin-bottom:16px;">
+      <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Check-In Questions</div>
+      <div id="lv-qa-list"></div>
+    </div>
+
+    <!-- Notes -->
+    <div id="lv-notes-wrap" style="display:none;">
+      <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Notes</div>
+      <div id="lv-notes" style="font-size:0.82rem;color:var(--text2);font-style:italic;line-height:1.6;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"></div>
+    </div>
+  </div>
+</div>
+
 <!-- NEW BUSINESS MODAL -->
 <div id="new-biz-modal" style="display:none;position:fixed;inset:0;z-index:9990;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)toggleNewBizPanel()">
   <div style="width:100%;max-width:500px;background:var(--surface);border:1px solid var(--gold-border);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto;animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
@@ -703,6 +764,13 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div class="form-group"><div class="field-label">Zip</div>
         <input class="field-input" type="text" id="nb-zip" placeholder="Zip" style="margin-bottom:0;"></div>
     </div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Latitude</div>
+        <input class="field-input" type="number" step="any" id="nb-lat" placeholder="Auto from GPS" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">Longitude</div>
+        <input class="field-input" type="number" step="any" id="nb-lng" placeholder="Auto from GPS" style="margin-bottom:0;"></div>
+    </div>
+    <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;margin-bottom:14px;" onclick="captureGPSForNewBiz()">📍 Capture Current GPS</button>
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn btn-primary btn-full" id="nb-save-btn" onclick="saveNewBizFromEntry()">Add &amp; Select Business</button>
     </div>
@@ -861,7 +929,7 @@ function toggleNewBizPanel() {
     document.body.style.overflow = '';
   } else {
     // Clear fields
-    ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip'].forEach(id => document.getElementById(id).value = '');
+    ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip','nb-lat','nb-lng'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('nb-type').value = '';
     // Zone hint
     const zoneKey = detectEmployeeZone();
@@ -901,7 +969,19 @@ async function getNextAccountNumber() {
   return String(next).padStart(4, '0');
 }
 
-async function saveNewBizFromEntry() {
+async function captureGPSForNewBiz() {
+  const btn = document.querySelector('#new-biz-modal .btn-outline');
+  btn.textContent = '📍 Acquiring…'; btn.disabled = true;
+  const geo = await getGeoLocation();
+  btn.textContent = '📍 Capture Current GPS'; btn.disabled = false;
+  if (geo) {
+    document.getElementById('nb-lat').value = geo.latitude.toFixed(6);
+    document.getElementById('nb-lng').value = geo.longitude.toFixed(6);
+    showToast(`GPS captured ✓`);
+  } else {
+    showToast('Could not get GPS location');
+  }
+}
   const name = document.getElementById('nb-name').value.trim();
   const type = document.getElementById('nb-type').value;
   if (!name) { showToast('Business name is required'); return; }
@@ -927,6 +1007,8 @@ async function saveNewBizFromEntry() {
     city: document.getElementById('nb-city').value.trim() || null,
     state: document.getElementById('nb-state').value.trim() || null,
     zip: document.getElementById('nb-zip').value.trim() || null,
+    latitude: parseFloat(document.getElementById('nb-lat').value) || null,
+    longitude: parseFloat(document.getElementById('nb-lng').value) || null,
   };
 
   const { error: bizError } = await db.from('businesses').insert(payload);
@@ -1032,6 +1114,67 @@ async function onBizChange() {
   answers = {};
   await loadQuestions(biz.business_type);
   renderQuestions();
+  // Fetch last visit for this business
+  const lvBtn = document.getElementById('last-visit-btn');
+  const lvNone = document.getElementById('last-visit-none');
+  lvBtn.style.display = 'none'; lvNone.style.display = 'none';
+  const { data: lastVisit } = await db.from('entries')
+    .select('*').eq('account_number', acct)
+    .order('created_at', { ascending: false }).limit(1).single();
+  if (lastVisit) {
+    window._lastVisitData = lastVisit;
+    lvBtn.style.display = '';
+    lvBtn.textContent = `🕐 Last Visit: ${lastVisit.entry_date}`;
+  } else {
+    window._lastVisitData = null;
+    lvNone.style.display = '';
+  }
+}
+
+function openLastVisitModal() {
+  const e = window._lastVisitData;
+  if (!e) return;
+  // Meta
+  document.getElementById('lv-meta').textContent = `${e.entry_date} at ${e.entry_time}`;
+  // Photo
+  const photoWrap = document.getElementById('lv-photo-wrap');
+  if (e.photo_url) { document.getElementById('lv-photo').src = e.photo_url; photoWrap.style.display = 'block'; }
+  else { photoWrap.style.display = 'none'; }
+  // Info fields
+  document.getElementById('lv-contact').textContent = e.visit_contact_name || '—';
+  document.getElementById('lv-position').textContent = e.visit_contact_position || '';
+  document.getElementById('lv-bays').textContent = e.bays || '—';
+  document.getElementById('lv-dealer').textContent = e.purchase_from_dealer || '—';
+  document.getElementById('lv-employee').textContent = e.display_name || e.username || '—';
+  // Q&A
+  const qaList = document.getElementById('lv-qa-list');
+  const answers = e.answers || [];
+  if (answers.length) {
+    qaList.innerHTML = answers.map(a => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:4px;min-width:36px;text-align:center;
+          background:${a.answer ? 'var(--teal-dim)' : 'var(--red-dim)'};
+          color:${a.answer ? 'var(--teal)' : 'var(--red)'};">
+          ${a.answer ? 'YES' : 'NO'}
+        </span>
+        <span style="font-size:0.82rem;">${a.question}</span>
+      </div>`).join('');
+    document.getElementById('lv-qa-wrap').style.display = 'block';
+  } else {
+    document.getElementById('lv-qa-wrap').style.display = 'none';
+  }
+  // Notes
+  const notesWrap = document.getElementById('lv-notes-wrap');
+  if (e.notes) { document.getElementById('lv-notes').textContent = e.notes; notesWrap.style.display = 'block'; }
+  else { notesWrap.style.display = 'none'; }
+  // Show modal
+  document.getElementById('last-visit-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLastVisitModal() {
+  document.getElementById('last-visit-modal').style.display = 'none';
+  document.body.style.overflow = '';
 }
 
 function renderQuestions() {
@@ -1447,7 +1590,7 @@ function toggleAddBizForm() {
   if (!visible) { clearBizForm(); editingBizAcct = null; populateZoneDropdown('biz-zone'); }
 }
 function clearBizForm() {
-  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email'].forEach(id=>document.getElementById(id).value='');
+  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('biz-zone').value='';
   document.getElementById('biz-type').value='';
 }
@@ -1466,6 +1609,8 @@ async function saveBusiness() {
     email: document.getElementById('biz-email').value.trim()||null,
     zone: document.getElementById('biz-zone').value||null,
     business_type: document.getElementById('biz-type').value||null,
+    latitude: parseFloat(document.getElementById('biz-lat').value)||null,
+    longitude: parseFloat(document.getElementById('biz-lng').value)||null,
   };
   const { error } = await db.from('businesses').upsert(payload, {onConflict:'account_number'});
   if (error) { showToast('Error saving business'); console.error(error); return; }
@@ -1509,14 +1654,17 @@ async function importBusinessCSV(e) {
         contact_name: col(['contact_name','contact','contactname','contact_person']),
         zone: col(['zone','territory','region']),
         business_type: col(['business_type','businesstype','type','shop_type','shoptype','category']),
+        latitude: col(['latitude','lat']),
+        longitude: col(['longitude','lng','lon','long']),
       };
       if (colMap.account_number===-1||colMap.business_name===-1) { showToast('Could not find account_number or business_name columns'); resetUploadZoneBiz(); return; }
       const records = [];
       for (let i=1;i<rows.length;i++) {
         const r=rows[i]; const get=(col)=>col!==-1&&r[col]?r[col].trim()||null:null;
+        const getNum=(col)=>{ const v=get(col); return v?parseFloat(v)||null:null; };
         const acct=get(colMap.account_number); const name=get(colMap.business_name);
         if(!acct||!name) continue;
-        records.push({account_number:acct,business_name:name,address:get(colMap.address),city:get(colMap.city),state:get(colMap.state),zip:get(colMap.zip),phone:get(colMap.phone),email:get(colMap.email),contact_name:get(colMap.contact_name),zone:get(colMap.zone),business_type:get(colMap.business_type)});
+        records.push({account_number:acct,business_name:name,address:get(colMap.address),city:get(colMap.city),state:get(colMap.state),zip:get(colMap.zip),phone:get(colMap.phone),email:get(colMap.email),contact_name:get(colMap.contact_name),zone:get(colMap.zone),business_type:get(colMap.business_type),latitude:getNum(colMap.latitude),longitude:getNum(colMap.longitude)});
       }
       if (!records.length) { showToast('No valid rows found'); resetUploadZoneBiz(); return; }
       for (let i=0;i<records.length;i+=50) {
@@ -1552,6 +1700,7 @@ async function renderBusinessDirectory() {
       <span class="biz-acct">#${b.account_number}</span>
       ${b.zone ? `<span style="font-size:0.7rem;color:var(--text3);font-style:italic;">${zoneName}</span>` : ''}
       ${b.business_type ? `<span style="font-size:0.7rem;color:${b.business_type==='Mechanical'?'var(--blue)':'var(--red)'};font-weight:700;">${b.business_type}</span>` : ''}
+      ${(b.latitude && b.longitude) ? `<a href="https://www.google.com/maps?q=${b.latitude},${b.longitude}" target="_blank" style="font-size:0.7rem;color:var(--teal);text-decoration:none;" title="${b.latitude.toFixed(5)}, ${b.longitude.toFixed(5)}">📍 Map</a>` : ''}
       <button class="btn btn-outline" style="font-size:0.72rem;padding:5px 10px;" onclick="editBusiness('${b.account_number}')">Edit</button>
       <button class="btn btn-danger" style="font-size:0.72rem;padding:5px 10px;" onclick="deleteBusiness('${b.account_number}')">✕</button>`;
     c.appendChild(row);
@@ -1573,6 +1722,8 @@ async function editBusiness(acct) {
   document.getElementById('biz-email').value = biz.email||'';
   document.getElementById('biz-zone').value = biz.zone||'';
   document.getElementById('biz-type').value = biz.business_type||'';
+  document.getElementById('biz-lat').value = biz.latitude||'';
+  document.getElementById('biz-lng').value = biz.longitude||'';
   document.getElementById('add-biz-form').style.display = 'block';
   document.getElementById('add-biz-form').scrollIntoView({behavior:'smooth'});
 }
