@@ -475,6 +475,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <button class="filter-chip active" id="fc-all" onclick="setSentFilter('all')">All</button>
           <button class="filter-chip" id="fc-unsent" onclick="setSentFilter('unsent')">Unsent Only</button>
           <button class="filter-chip" id="fc-sent" onclick="setSentFilter('sent')">Sent</button>
+          <button class="filter-chip" id="fc-flagged" onclick="setSentFilter('flagged')" style="border-color:rgba(255,92,92,0.4);color:var(--red);">⚠️ GPS Flagged</button>
           <select class="field-input" id="fc-date" style="margin-bottom:0;font-size:0.73rem;padding:5px 10px;width:auto;min-width:160px;" onchange="setSentFilter('date',this.value)">
             <option value="">— Filter by sent date —</option>
           </select>
@@ -726,6 +727,51 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
     <div id="lv-notes-wrap" style="display:none;">
       <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Notes</div>
       <div id="lv-notes" style="font-size:0.82rem;color:var(--text2);font-style:italic;line-height:1.6;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- GPS REVIEW MODAL -->
+<div id="gps-review-modal" style="display:none;position:fixed;inset:0;z-index:9988;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeGpsReviewModal()">
+  <div style="width:100%;max-width:520px;background:var(--surface);border:1px solid var(--red-dim);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto;animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:1rem;font-weight:800;">🔍 GPS Location Review</div>
+      <button onclick="closeGpsReviewModal()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <div id="gr-biz-name" style="font-size:0.82rem;color:var(--text2);margin-bottom:18px;"></div>
+
+    <div id="gr-flag-banner" style="padding:10px 14px;border-radius:8px;margin-bottom:18px;font-size:0.82rem;font-weight:600;"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px;">
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+        <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">📍 Visit Location</div>
+        <div id="gr-visit-coords" style="font-size:0.82rem;font-family:monospace;color:var(--text);margin-bottom:6px;"></div>
+        <a id="gr-visit-map" href="#" target="_blank" style="font-size:0.72rem;color:var(--teal);">View on Google Maps ↗</a>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;">
+        <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">🏢 Business Record</div>
+        <div id="gr-biz-coords" style="font-size:0.82rem;font-family:monospace;color:var(--text);margin-bottom:6px;"></div>
+        <a id="gr-biz-map" href="#" target="_blank" style="font-size:0.72rem;color:var(--teal);display:none;">View on Google Maps ↗</a>
+        <span id="gr-biz-no-coords" style="font-size:0.72rem;color:var(--text3);font-style:italic;display:none;">No coordinates on file</span>
+      </div>
+    </div>
+
+    <div id="gr-distance-row" style="text-align:center;font-size:0.85rem;color:var(--red);font-weight:700;margin-bottom:18px;display:none;"></div>
+
+    <div style="background:var(--surface2);border:1px solid var(--gold-border);border-radius:10px;padding:16px;margin-bottom:18px;">
+      <div style="font-size:0.75rem;font-weight:700;color:var(--gold);margin-bottom:10px;">Update Business Location</div>
+      <div style="font-size:0.78rem;color:var(--text2);margin-bottom:12px;">If the visit location is correct, apply it to the business record. You can also enter coordinates manually.</div>
+      <div class="form-row-2" style="margin-bottom:10px;">
+        <div><div class="field-label">Latitude</div>
+          <input class="field-input" type="number" step="any" id="gr-new-lat" style="margin-bottom:0;"></div>
+        <div><div class="field-label">Longitude</div>
+          <input class="field-input" type="number" step="any" id="gr-new-lng" style="margin-bottom:0;"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-outline" style="font-size:0.75rem;" id="gr-use-visit-btn" onclick="grUseVisitCoords()">↙ Use Visit Location</button>
+        <button class="btn btn-primary" onclick="grSaveAndClearFlag()">✓ Save & Clear Flag</button>
+        <button class="btn btn-outline" style="font-size:0.75rem;" onclick="grClearFlagOnly()">Clear Flag Only</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1254,6 +1300,18 @@ async function uploadPhoto(accountNumber) {
   return urlData?.publicUrl ? urlData.publicUrl + '?t=' + Date.now() : null;
 }
 
+// ═══ GPS DISTANCE HELPER ═══
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Earth radius in meters
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+const FEET_PER_METER = 3.28084;
+const FLAG_THRESHOLD_FEET = 300;
+
 async function submitEntry() {
   const acct = document.getElementById('biz-select').value;
   const bays = document.getElementById('bays-select').value;
@@ -1269,6 +1327,23 @@ async function submitEntry() {
   btn.disabled = true; btn.textContent = 'Saving…';
 
   const [geo, photoUrl] = await Promise.all([getGeoLocation(), uploadPhoto(acct)]);
+
+  // Determine GPS flag
+  let gpsFlag = null;
+  if (geo) {
+    const biz = selectedBiz;
+    const bizLat = biz?.latitude;
+    const bizLng = biz?.longitude;
+    if (bizLat && bizLng) {
+      const distMeters = haversineMeters(geo.latitude, geo.longitude, bizLat, bizLng);
+      const distFeet = distMeters * FEET_PER_METER;
+      if (distFeet > FLAG_THRESHOLD_FEET) {
+        gpsFlag = `visit_location_mismatch`; // visit GPS far from business record
+      }
+    } else {
+      gpsFlag = 'no_business_location'; // business has no lat/lng on file
+    }
+  }
 
   if (photoUrl) {
     await db.from('business_photos').upsert({ account_number: acct, photo_url: photoUrl, taken_by: currentUser.username, taken_at: new Date().toISOString() }, { onConflict: 'account_number' });
@@ -1290,6 +1365,7 @@ async function submitEntry() {
     latitude: geo?.latitude || null,
     longitude: geo?.longitude || null,
     location_accuracy: geo?.accuracy || null,
+    gps_flag: gpsFlag,
     entry_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     entry_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     answers: answerPayload,
@@ -1328,7 +1404,8 @@ function entryHTML(e) {
   const sc = pct >= 75 ? 'score-high' : pct >= 40 ? 'score-med' : 'score-low';
   const mapsUrl = e.latitude ? `https://www.google.com/maps?q=${e.latitude},${e.longitude}` : null;
   const sentDate = e.used_in_report_at ? new Date(e.used_in_report_at).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : null;
-  return `<div class="entry-card">
+  const flagLabel = e.gps_flag === 'visit_location_mismatch' ? '⚠️ Location Mismatch' : e.gps_flag === 'no_business_location' ? '📍 No Business Location' : null;
+  return `<div class="entry-card" style="${e.gps_flag ? 'border-color:rgba(255,92,92,0.4);' : ''}">
     <div class="entry-top">
       <div>
         <div class="entry-biz">${e.business}</div>
@@ -1342,6 +1419,7 @@ function entryHTML(e) {
         <div class="badge-bays">🔧 ${e.bays} Bays</div>
         <div class="score-pill ${sc}">${yes}/${ans.length} YES</div>
         ${sentDate ? `<div class="badge-sent" title="Sent on ${sentDate} — click to revert" onclick="revertEntry('${e.id}','${sentDate}')">✓ Sent ${sentDate}</div>` : ''}
+        ${flagLabel ? `<div style="font-size:0.68rem;font-weight:800;padding:3px 9px;border-radius:5px;background:var(--red-dim);color:var(--red);border:1px solid rgba(255,92,92,0.3);">${flagLabel}</div>` : ''}
       </div>
     </div>
     <div class="chips-wrap">${ans.map(a => `<span class="chip chip-${a.answer?'yes':'no'}" title="${a.question}">${a.answer?'✓':'✗'} ${a.question.length>34?a.question.slice(0,34)+'…':a.question}</span>`).join('')}</div>
@@ -1349,6 +1427,7 @@ function entryHTML(e) {
     <div class="entry-footer">
       ${e.photo_url ? `<img class="entry-photo-thumb" src="${e.photo_url}" onclick="openLightbox('${e.photo_url}')" alt="Visit photo">` : ''}
       ${mapsUrl ? `<a class="entry-gps-link" href="${mapsUrl}" target="_blank">📍 View Location (±${Math.round(e.location_accuracy||0)}m)</a>` : '<span style="font-size:0.72rem;color:var(--text3);">📍 No GPS data</span>'}
+      ${(e.gps_flag && currentUser?.role === 'owner') ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;margin-left:auto;" onclick="openGpsReviewModal(${JSON.stringify(e).replace(/"/g,'&quot;')})">🔍 Review GPS</button>` : ''}
     </div>
   </div>`;
 }
@@ -1375,6 +1454,7 @@ function applyFiltersAndRender() {
   let list = allFilter === 'all' ? allEntries : allEntries.filter(e => e.username === allFilter);
   if (sentFilter === 'unsent') list = list.filter(e => !e.used_in_report_at);
   else if (sentFilter === 'sent') list = list.filter(e => !!e.used_in_report_at);
+  else if (sentFilter === 'flagged') list = list.filter(e => !!e.gps_flag);
   else if (sentFilter === 'date' && sentDateFilter) {
     list = list.filter(e => e.used_in_report_at &&
       new Date(e.used_in_report_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) === sentDateFilter);
@@ -1398,7 +1478,7 @@ function setSentFilter(type, val) {
     const el=document.getElementById(id); if(el) el.classList.remove('active');
   });
   if (type !== 'date') { document.getElementById('fc-date').value = ''; }
-  const map = {all:'fc-all',unsent:'fc-unsent',sent:'fc-sent'};
+  const map = {all:'fc-all',unsent:'fc-unsent',sent:'fc-sent',flagged:'fc-flagged'};
   if (map[type]) document.getElementById(map[type]).classList.add('active');
   applyFiltersAndRender();
 }
@@ -1562,6 +1642,7 @@ function exportCSV() {
   let list = allFilter === 'all' ? allEntries : allEntries.filter(e => e.username === allFilter);
   if (sentFilter === 'unsent') list = list.filter(e => !e.used_in_report_at);
   else if (sentFilter === 'sent') list = list.filter(e => !!e.used_in_report_at);
+  else if (sentFilter === 'flagged') list = list.filter(e => !!e.gps_flag);
   else if (sentFilter === 'date' && sentDateFilter) list = list.filter(e => e.used_in_report_at && new Date(e.used_in_report_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})===sentDateFilter);
   if (!list.length) { showToast('No entries to export'); return; }
   const allQs = [...new Set(list.flatMap(e=>(e.answers||[]).map(a=>a.question)))];
@@ -1956,6 +2037,107 @@ async function changePassword() {
   if(error) { showToast('Error updating password'); return; }
   document.getElementById('new-pw').value=''; document.getElementById('new-pw2').value='';
   showToast(`Password updated for ${username} ✓`);
+}
+
+// ═══ GPS REVIEW MODAL ═══
+let _grEntry = null;
+
+async function openGpsReviewModal(entry) {
+  _grEntry = entry;
+  // Fetch current business record for latest coords
+  const { data: biz } = await db.from('businesses').select('business_name,latitude,longitude,account_number').eq('account_number', entry.account_number).single();
+
+  document.getElementById('gr-biz-name').textContent = `#${entry.account_number} — ${entry.business}`;
+
+  // Flag banner
+  const banner = document.getElementById('gr-flag-banner');
+  if (entry.gps_flag === 'no_business_location') {
+    banner.textContent = '📍 No coordinates exist for this business. The visit location can be used to set them.';
+    banner.style.cssText = 'padding:10px 14px;border-radius:8px;margin-bottom:18px;font-size:0.82rem;font-weight:600;background:var(--gold-dim);color:var(--gold);border:1px solid var(--gold-border);';
+  } else {
+    banner.textContent = `⚠️ Visit location is more than ${FLAG_THRESHOLD_FEET} feet from the business record coordinates.`;
+    banner.style.cssText = 'padding:10px 14px;border-radius:8px;margin-bottom:18px;font-size:0.82rem;font-weight:600;background:var(--red-dim);color:var(--red);border:1px solid rgba(255,92,92,0.3);';
+  }
+
+  // Visit coords
+  document.getElementById('gr-visit-coords').textContent = entry.latitude ? `${entry.latitude.toFixed(6)}, ${entry.longitude.toFixed(6)}` : 'Not recorded';
+  const visitMapLink = document.getElementById('gr-visit-map');
+  if (entry.latitude) {
+    visitMapLink.href = `https://www.google.com/maps?q=${entry.latitude},${entry.longitude}`;
+    visitMapLink.style.display = '';
+  } else {
+    visitMapLink.style.display = 'none';
+  }
+
+  // Business coords
+  const bizCoords = document.getElementById('gr-biz-coords');
+  const bizMap = document.getElementById('gr-biz-map');
+  const bizNoCoords = document.getElementById('gr-biz-no-coords');
+  if (biz?.latitude && biz?.longitude) {
+    bizCoords.textContent = `${biz.latitude.toFixed(6)}, ${biz.longitude.toFixed(6)}`;
+    bizMap.href = `https://www.google.com/maps?q=${biz.latitude},${biz.longitude}`;
+    bizMap.style.display = '';
+    bizNoCoords.style.display = 'none';
+  } else {
+    bizCoords.textContent = '—';
+    bizMap.style.display = 'none';
+    bizNoCoords.style.display = '';
+  }
+
+  // Distance
+  const distRow = document.getElementById('gr-distance-row');
+  if (entry.latitude && biz?.latitude && biz?.longitude) {
+    const dist = haversineMeters(entry.latitude, entry.longitude, biz.latitude, biz.longitude);
+    const distFeet = Math.round(dist * FEET_PER_METER);
+    distRow.textContent = `Distance between visit and business record: ${distFeet.toLocaleString()} ft (${Math.round(dist)} m)`;
+    distRow.style.display = 'block';
+  } else {
+    distRow.style.display = 'none';
+  }
+
+  // Pre-fill update fields with visit coords
+  document.getElementById('gr-new-lat').value = entry.latitude?.toFixed(6) || '';
+  document.getElementById('gr-new-lng').value = entry.longitude?.toFixed(6) || '';
+
+  document.getElementById('gps-review-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeGpsReviewModal() {
+  document.getElementById('gps-review-modal').style.display = 'none';
+  document.body.style.overflow = '';
+  _grEntry = null;
+}
+
+function grUseVisitCoords() {
+  if (!_grEntry) return;
+  document.getElementById('gr-new-lat').value = _grEntry.latitude?.toFixed(6) || '';
+  document.getElementById('gr-new-lng').value = _grEntry.longitude?.toFixed(6) || '';
+}
+
+async function grSaveAndClearFlag() {
+  if (!_grEntry) return;
+  const lat = parseFloat(document.getElementById('gr-new-lat').value);
+  const lng = parseFloat(document.getElementById('gr-new-lng').value);
+  if (!lat || !lng) { showToast('Enter valid coordinates first'); return; }
+  // Update business lat/lng
+  const { error: bizErr } = await db.from('businesses').update({ latitude: lat, longitude: lng }).eq('account_number', _grEntry.account_number);
+  if (bizErr) { showToast('Error updating business location'); console.error(bizErr); return; }
+  // Clear flag on entry
+  const { error: entryErr } = await db.from('entries').update({ gps_flag: null }).eq('id', _grEntry.id);
+  if (entryErr) { showToast('Error clearing flag'); console.error(entryErr); return; }
+  showToast('Business location updated & flag cleared ✓');
+  closeGpsReviewModal();
+  await renderAllEntries();
+}
+
+async function grClearFlagOnly() {
+  if (!_grEntry) return;
+  const { error } = await db.from('entries').update({ gps_flag: null }).eq('id', _grEntry.id);
+  if (error) { showToast('Error clearing flag'); return; }
+  showToast('Flag cleared ✓');
+  closeGpsReviewModal();
+  await renderAllEntries();
 }
 
 // ═══ TOAST ═══
