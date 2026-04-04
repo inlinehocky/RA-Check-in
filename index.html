@@ -525,7 +525,11 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
             <div class="form-group"><div class="field-label">Email</div>
               <input class="field-input" type="email" id="biz-email" placeholder="email@business.com" style="margin-bottom:0;"></div>
             <div class="form-group"><div class="field-label">Zone</div>
-              <select class="field-input" id="biz-zone" style="margin-bottom:0;"><option value="">— Select Zone —</option></select></div>
+              <select class="field-input" id="biz-zone" style="margin-bottom:0;" onchange="onBizZoneSelectChange()"><option value="">— Select Zone —</option></select>
+              <div id="biz-zone-new-wrap" style="display:none;margin-top:6px;">
+                <input class="field-input" type="text" id="biz-zone-new" placeholder="New zone key (e.g. HOU, DAL02)" style="margin-bottom:0;">
+                <div style="font-size:0.7rem;color:var(--text3);margin-top:4px;font-style:italic;">This zone will be created when you save the business.</div>
+              </div></div>
             <div class="form-group"><div class="field-label">Business Type</div>
               <select class="field-input" id="biz-type" style="margin-bottom:0;">
                 <option value="">— Select Type —</option>
@@ -785,7 +789,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div style="font-size:1rem;font-weight:800;color:var(--gold);">➕ Add New Business</div>
       <button onclick="toggleNewBizPanel()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;line-height:1;">✕</button>
     </div>
-    <div id="nb-zone-info" style="font-size:0.75rem;color:var(--teal);font-style:italic;margin-bottom:14px;padding:8px 12px;background:var(--teal-dim);border-radius:7px;border:1px solid rgba(0,201,167,0.2);display:none;"></div>
+    <div id="nb-zone-info" style="font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--surface2);border-radius:8px;border:1px solid var(--border);color:var(--text2);">📍 Zone: detecting…</div>
     <div class="form-row-2">
       <div class="form-group"><div class="field-label">Business Name *</div>
         <input class="field-input" type="text" id="nb-name" placeholder="Business name" style="margin-bottom:0;"></div>
@@ -951,13 +955,40 @@ async function deleteZone(id) {
 async function populateZoneDropdown(selectId) {
   const sel = document.getElementById(selectId);
   const cur = sel.value;
-  // keep first option
   while (sel.options.length > 1) sel.remove(1);
-  allZones.forEach(z => {
-    const o = document.createElement('option'); o.value = z.zone_key; o.textContent = `${z.zone_name} (${z.zone_key})`;
+  // Pull distinct zone values from businesses table
+  const { data } = await db.from('businesses').select('zone').not('zone', 'is', null);
+  const distinctZones = [...new Set((data || []).map(b => b.zone).filter(Boolean))].sort();
+  distinctZones.forEach(zv => {
+    const o = document.createElement('option');
+    o.value = zv;
+    // Try to match a friendly name from zones table
+    const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+    o.textContent = zObj ? `${zv} — ${zObj.zone_name}` : zv;
     sel.appendChild(o);
   });
-  if (cur) sel.value = cur;
+  // Add "new zone" option only for the business form dropdown
+  if (selectId === 'biz-zone') {
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = '+ Add new zone…';
+    sel.appendChild(newOpt);
+  }
+  if (cur && cur !== '__new__') sel.value = cur;
+}
+
+function onBizZoneSelectChange() {
+  const sel = document.getElementById('biz-zone');
+  const wrap = document.getElementById('biz-zone-new-wrap');
+  const inp = document.getElementById('biz-zone-new');
+  if (sel.value === '__new__') {
+    wrap.style.display = 'block';
+    inp.value = '';
+    inp.focus();
+  } else {
+    wrap.style.display = 'none';
+    inp.value = '';
+  }
 }
 
 // ═══ QUESTIONS ═══
@@ -983,11 +1014,13 @@ function toggleNewBizPanel() {
     const zoneKey = detectEmployeeZone();
     const zoneObj = allZones.find(z => z.zone_key === zoneKey);
     const info = document.getElementById('nb-zone-info');
-    if (zoneObj) {
-      info.textContent = `📍 Will be added to zone: ${zoneObj.zone_name} (${zoneObj.zone_key})`;
-      info.style.display = 'block';
+    if (zoneKey) {
+      const zoneName = zoneObj ? ` — ${zoneObj.zone_name}` : '';
+      info.textContent = `📍 Zone: ${zoneKey}${zoneName} (auto-assigned, cannot be changed)`;
+      info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--teal-dim);border-radius:8px;border:1px solid rgba(0,201,167,0.3);color:var(--teal);';
     } else {
-      info.style.display = 'none';
+      info.textContent = '⚠️ Zone could not be detected — make sure businesses are assigned to you';
+      info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--red-dim);border-radius:8px;border:1px solid rgba(255,92,92,0.3);color:var(--red);';
     }
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
@@ -1675,14 +1708,18 @@ function toggleAddBizForm() {
   if (!visible) { clearBizForm(); editingBizAcct = null; populateZoneDropdown('biz-zone'); }
 }
 function clearBizForm() {
-  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng'].forEach(id=>document.getElementById(id).value='');
+  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng','biz-zone-new'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('biz-zone').value='';
+  document.getElementById('biz-zone-new-wrap').style.display='none';
   document.getElementById('biz-type').value='';
 }
 async function saveBusiness() {
   const acct = document.getElementById('biz-acct').value.trim();
   const name = document.getElementById('biz-name').value.trim();
   if (!acct || !name) { showToast('Account number and name required'); return; }
+  if (document.getElementById('biz-zone').value === '__new__' && !document.getElementById('biz-zone-new').value.trim()) {
+    showToast('Enter a zone key or select an existing zone'); return;
+  }
   const payload = {
     account_number: acct, business_name: name,
     contact_name: document.getElementById('biz-contact').value.trim()||null,
@@ -1692,15 +1729,21 @@ async function saveBusiness() {
     state: document.getElementById('biz-state').value.trim()||null,
     zip: document.getElementById('biz-zip').value.trim()||null,
     email: document.getElementById('biz-email').value.trim()||null,
-    zone: document.getElementById('biz-zone').value||null,
+    zone: (() => {
+      const sel = document.getElementById('biz-zone');
+      if (sel.value === '__new__') {
+        const newZone = document.getElementById('biz-zone-new').value.trim();
+        return newZone || null;
+      }
+      return sel.value || null;
+    })(),
     business_type: document.getElementById('biz-type').value||null,
     latitude: parseFloat(document.getElementById('biz-lat').value)||null,
     longitude: parseFloat(document.getElementById('biz-lng').value)||null,
   };
   const { error } = await db.from('businesses').upsert(payload, {onConflict:'account_number'});
   if (error) { showToast('Error saving business'); console.error(error); return; }
-  toggleAddBizForm(); await renderBusinessDirectory(); showToast('Business saved');
-}
+  toggleAddBizForm(); await renderBusinessDirectory(); showToast('Business saved');}
 
 function parseCSV(text) {
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
@@ -1824,6 +1867,8 @@ async function editBusiness(acct) {
   document.getElementById('biz-zip').value = biz.zip||'';
   document.getElementById('biz-email').value = biz.email||'';
   document.getElementById('biz-zone').value = biz.zone||'';
+  document.getElementById('biz-zone-new-wrap').style.display = 'none';
+  document.getElementById('biz-zone-new').value = '';
   document.getElementById('biz-type').value = biz.business_type||'';
   document.getElementById('biz-lat').value = biz.latitude||'';
   document.getElementById('biz-lng').value = biz.longitude||'';
