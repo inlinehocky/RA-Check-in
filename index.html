@@ -600,7 +600,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
             <option value="">All Zones</option>
           </select>
           <button class="btn btn-outline" style="font-size:0.75rem;padding:7px 14px;white-space:nowrap;" onclick="selectAllInZone(true)">✓ Assign All in Zone</button>
-          <button class="btn btn-danger" style="font-size:0.75rem;padding:7px 14px;white-space:nowrap;" onclick="selectAllInZone(false)">✕ Remove All in Zone</button>
+          <button class="btn btn-danger" style="font-size:0.75rem;padding:7px 14px;white-space:nowrap;" onclick="selectAllInZone(false)">✕ Remove All Assigned</button>
         </div>
         <div id="assign-biz-search" style="margin-bottom:12px;">
           <input class="field-input" type="text" id="biz-search-input" placeholder="Search businesses…" style="margin-bottom:0;" oninput="renderBizAssignListUI()">
@@ -2112,13 +2112,13 @@ function renderBizAssignListUI() {
 }
 async function selectAllInZone(assign) {
   const zoneFilter = document.getElementById('assign-zone-filter').value;
-  if (!zoneFilter) { showToast('Select a zone first'); return; }
   if (!assignTarget) { showToast('Select an employee first'); return; }
-  const inZone = allBusinesses.filter(b => b.zone === zoneFilter);
-  if (!inZone.length) { showToast('No businesses in this zone'); return; }
-  const zObj = allZones.find(z => zoneFilter.toUpperCase().startsWith(z.zone_key.toUpperCase()));
-  const label = zObj ? `${zoneFilter} (${zObj.zone_name})` : zoneFilter;
   if (assign) {
+    if (!zoneFilter) { showToast('Select a zone first'); return; }
+    const inZone = allBusinesses.filter(b => b.zone === zoneFilter);
+    if (!inZone.length) { showToast('No businesses in this zone'); return; }
+    const zObj = allZones.find(z => zoneFilter.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+    const label = zObj ? `${zoneFilter} (${zObj.zone_name})` : zoneFilter;
     const records = inZone.map(b => ({ username: assignTarget, account_number: b.account_number }));
     for (let i=0; i<records.length; i+=50) {
       await db.from('business_assignments').upsert(records.slice(i,i+50), { onConflict: 'username,account_number' });
@@ -2126,11 +2126,18 @@ async function selectAllInZone(assign) {
     inZone.forEach(b => assignedAccounts.add(b.account_number));
     showToast(`✓ All ${inZone.length} ${label} businesses assigned`);
   } else {
-    for (const b of inZone) {
-      await db.from('business_assignments').delete().eq('username', assignTarget).eq('account_number', b.account_number);
-      assignedAccounts.delete(b.account_number);
+    // Remove ALL assigned businesses regardless of zone filter
+    if (!assignedAccounts.size) { showToast('No businesses assigned to remove'); return; }
+    if (!confirm(`Remove all ${assignedAccounts.size} assigned businesses from this employee?`)) return;
+    const ids = [...assignedAccounts];
+    for (let i=0; i<ids.length; i+=50) {
+      const batch = ids.slice(i, i+50);
+      for (const acct of batch) {
+        await db.from('business_assignments').delete().eq('username', assignTarget).eq('account_number', acct);
+      }
+      batch.forEach(acct => assignedAccounts.delete(acct));
     }
-    showToast(`Removed all ${inZone.length} ${label} businesses`);
+    showToast(`Removed all ${ids.length} assigned businesses`);
   }
   renderBizAssignListUI();
 }
