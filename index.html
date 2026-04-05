@@ -1148,7 +1148,7 @@ async function saveNewBizFromEntry() {
     business_name: name,
     business_type: type,
     zone: zoneKey,
-    contact_name: document.getElementById('nb-contact').value.trim() || null,
+    contact_name: toProperCase(document.getElementById('nb-contact').value.trim()) || null,
     phone: document.getElementById('nb-phone').value.trim() || null,
     address: document.getElementById('nb-addr').value.trim() || null,
     city: document.getElementById('nb-city').value.trim() || null,
@@ -1429,7 +1429,7 @@ const FLAG_THRESHOLD_FEET = 300;
 async function submitEntry() {
   const acct = document.getElementById('biz-select').value;
   const bays = document.getElementById('bays-select').value;
-  const visitContactName = document.getElementById('visit-contact-name').value.trim();
+  const visitContactName = toProperCase(document.getElementById('visit-contact-name').value.trim());
   const visitContactPosition = document.getElementById('visit-contact-position').value;
   const purchaseFromDealer = document.getElementById('purchase-from-dealer').value;
   const notes = document.getElementById('entry-notes').value.trim();
@@ -1676,6 +1676,11 @@ async function generateReport(type, zone, count, available) {
 }
 
 // ═══ PDF REPORT GENERATOR ═══
+function toProperCase(str) {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function buildReportPDF(entries, type, zoneName, sentAt) {
   const logoSrc = type === 'Mechanical' ? IMG_MECHANICAL : IMG_COLLISION;
   const sentDateStr = new Date(sentAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
@@ -1684,8 +1689,8 @@ function buildReportPDF(entries, type, zoneName, sentAt) {
   // Build print HTML
   const cards = entries.map(e => {
     const mapsUrl = e.latitude ? `https://www.google.com/maps?q=${e.latitude},${e.longitude}` : null;
-    const addrParts = [e.businesses?.address, e.businesses?.city, e.businesses?.state, e.businesses?.zip].filter(Boolean);
-    const addr2 = [e.businesses?.city, e.businesses?.state, e.businesses?.zip].filter(Boolean).join(', ');
+    const contactName = toProperCase(e.businesses?.contact_name || e.visit_contact_name || '—');
+    const visitContactName = toProperCase(e.visit_contact_name || '—');
     return `
     <div class="visit-card">
       <div class="biz-header">${e.business}</div>
@@ -1694,7 +1699,7 @@ function buildReportPDF(entries, type, zoneName, sentAt) {
         <div class="col">
           <div class="col-title">Business Info</div>
           <div>Business Name: ${e.business}</div>
-          <div>Business Contact: ${e.businesses?.contact_name || e.visit_contact_name || '—'}</div>
+          <div>Business Contact: ${contactName}</div>
           <div>Business Phone: ${e.businesses?.phone || '—'}</div>
         </div>
         <div class="col">
@@ -1706,16 +1711,13 @@ function buildReportPDF(entries, type, zoneName, sentAt) {
         </div>
         <div class="col">
           <div class="col-title">Visit Information</div>
-          <div>Visit Contact: ${e.visit_contact_name || '—'}</div>
+          <div>Visit Contact: ${visitContactName}</div>
           <div>Contact Position: ${e.visit_contact_position || '—'}</div>
           <div>Service Bays: ${e.bays || '—'}</div>
           <div>Dealer Purchases: ${e.purchase_from_dealer || '—'}</div>
         </div>
-        <div class="col">
-          <div class="col-title">Visit Comments</div>
-          <div>${e.notes || '—'}</div>
-        </div>
       </div>
+      ${e.notes ? `<div class="comments-row"><div class="col-title">Visit Comments</div><div class="comments-text">${e.notes}</div></div>` : ''}
       ${mapsUrl ? `<div class="maps-link"><a href="${mapsUrl}" target="_blank">Click here to view the approximate location on Google Maps (Some scrolling could be required)</a></div>` : ''}
     </div>`;
   }).join('');
@@ -1735,10 +1737,12 @@ function buildReportPDF(entries, type, zoneName, sentAt) {
   .visit-card { border: 1px solid #ccc; border-radius: 6px; padding: 16px 20px; margin: 0 36px 20px; page-break-inside: avoid; }
   .biz-header { font-weight: bold; font-size: 12pt; margin-bottom: 10px; }
   .card-hr { border: none; border-top: 1px solid #ccc; margin-bottom: 12px; }
-  .card-cols { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
+  .card-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 10px; }
   .col { font-size: 9pt; line-height: 1.7; }
   .col-title { font-weight: bold; font-size: 10pt; margin-bottom: 4px; }
-  .maps-link { margin-top: 10px; font-size: 9pt; }
+  .comments-row { border-top: 1px solid #eee; padding-top: 8px; margin-bottom: 8px; font-size: 9pt; line-height: 1.6; }
+  .comments-text { margin-top: 3px; }
+  .maps-link { font-size: 9pt; }
   .maps-link a { color: #1a73e8; }
   .page-footer { text-align: center; font-style: italic; font-size: 8pt; color: #888; padding: 8px; }
   @media print {
@@ -1815,7 +1819,7 @@ async function saveBusiness() {
   }
   const payload = {
     account_number: acct, business_name: name,
-    contact_name: document.getElementById('biz-contact').value.trim()||null,
+    contact_name: toProperCase(document.getElementById('biz-contact').value.trim())||null,
     phone: document.getElementById('biz-phone').value.trim()||null,
     address: document.getElementById('biz-addr').value.trim()||null,
     city: document.getElementById('biz-city').value.trim()||null,
