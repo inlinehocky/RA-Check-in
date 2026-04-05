@@ -481,6 +481,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <select class="field-input" id="fc-date" style="margin-bottom:0;font-size:0.73rem;padding:5px 10px;width:auto;min-width:160px;" onchange="setSentFilter('date',this.value)">
             <option value="">— Filter by sent date —</option>
           </select>
+          <button class="btn btn-danger" id="btn-revert-date" style="font-size:0.73rem;padding:5px 12px;display:none;" onclick="revertAllOnDate()">↩ Revert All on Date</button>
         </div>
         <div id="all-entries-list"></div>
       </div>
@@ -581,6 +582,14 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 
       <div class="card">
         <div class="card-head">
+          <div><div class="card-title">📍 Employee Zone Assignments</div>
+            <div class="card-sub">Assign zones to employees. Their new-business zone auto-detects from these.</div></div>
+        </div>
+        <div id="emp-zone-list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
           <div><div class="card-title">📋 Assign Businesses</div>
             <div class="card-sub">Select employee, filter by zone, then assign businesses.</div></div>
         </div>
@@ -601,8 +610,8 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 
       <div class="card">
         <div class="card-head">
-          <div><div class="card-title">🗺️ Daily Route Map</div>
-            <div class="card-sub">One Google Maps link per employee per day.</div></div>
+          <div><div class="card-title">🗺️ Zone Route Maps</div>
+            <div class="card-sub">Set a Google Maps link per zone. Employees assigned to a zone see that map automatically.</div></div>
         </div>
         <div id="map-link-editor"></div>
       </div>
@@ -733,6 +742,51 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
     <div id="lv-notes-wrap" style="display:none;">
       <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Notes</div>
       <div id="lv-notes" style="font-size:0.82rem;color:var(--text2);font-style:italic;line-height:1.6;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT ENTRY MODAL -->
+<div id="edit-entry-modal" style="display:none;position:fixed;inset:0;z-index:9986;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeEditEntryModal()">
+  <div style="width:100%;max-width:540px;background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto;animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:1rem;font-weight:800;">✏️ Edit Entry</div>
+      <button onclick="closeEditEntryModal()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <div id="ee-meta" style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-bottom:18px;"></div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Number of Bays</div>
+        <select class="field-input" id="ee-bays" style="margin-bottom:0;">
+          <option value="">— Select —</option>
+          <option value="1-3">1 – 3 Bays</option>
+          <option value="4-6">4 – 6 Bays</option>
+          <option value="7+">7 or More Bays</option>
+        </select></div>
+      <div class="form-group"><div class="field-label">Dealer Purchases</div>
+        <select class="field-input" id="ee-dealer" style="margin-bottom:0;">
+          <option value="">— Select —</option>
+          <option value="Some of our dealers">Some of our dealers</option>
+          <option value="All of our dealers">All of our dealers</option>
+          <option value="Not sure">Not sure</option>
+        </select></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Visit Contact Name</div>
+        <input class="field-input" type="text" id="ee-contact-name" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">Visit Contact Position</div>
+        <select class="field-input" id="ee-contact-pos" style="margin-bottom:0;">
+          <option value="">— Select —</option>
+          <option value="Owner">Owner</option>
+          <option value="Manager">Manager</option>
+          <option value="Buyer">Buyer</option>
+          <option value="Other">Other</option>
+        </select></div>
+    </div>
+    <div class="form-group"><div class="field-label">Notes</div>
+      <textarea class="field-input" id="ee-notes" style="margin-bottom:0;min-height:70px;"></textarea></div>
+    <div id="ee-qa-wrap" style="margin-bottom:14px;"></div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button class="btn btn-primary btn-full" onclick="saveEditEntry()">Save Changes</button>
     </div>
   </div>
 </div>
@@ -1000,7 +1054,7 @@ async function loadQuestions(bizType) {
 
 // ═══ ENTRY FORM ═══
 // ═══ NEW BUSINESS FROM ENTRY FORM ═══
-function toggleNewBizPanel() {
+async function toggleNewBizPanel() {
   const modal = document.getElementById('new-biz-modal');
   const open = modal.style.display === 'flex';
   if (open) {
@@ -1011,7 +1065,9 @@ function toggleNewBizPanel() {
     ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip','nb-lat','nb-lng'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('nb-type').value = '';
     // Zone hint
-    const zoneKey = detectEmployeeZone();
+    // Zone hint — fetch from user_zones
+    const { data: empZones } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username);
+    const zoneKey = empZones && empZones.length ? empZones[0].zone_key : detectEmployeeZone();
     const zoneObj = allZones.find(z => z.zone_key === zoneKey);
     const info = document.getElementById('nb-zone-info');
     if (zoneKey) {
@@ -1019,7 +1075,7 @@ function toggleNewBizPanel() {
       info.textContent = `📍 Zone: ${zoneKey}${zoneName} (auto-assigned, cannot be changed)`;
       info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--teal-dim);border-radius:8px;border:1px solid rgba(0,201,167,0.3);color:var(--teal);';
     } else {
-      info.textContent = '⚠️ Zone could not be detected — make sure businesses are assigned to you';
+      info.textContent = '⚠️ Zone could not be detected — make sure you have zones assigned';
       info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--red-dim);border-radius:8px;border:1px solid rgba(255,92,92,0.3);color:var(--red);';
     }
     modal.style.display = 'flex';
@@ -1029,7 +1085,7 @@ function toggleNewBizPanel() {
 }
 
 function detectEmployeeZone() {
-  // Derive zone from the majority of assigned businesses (or first found)
+  // Derive zone from the majority of assigned businesses (fallback if no user_zones set)
   if (!assignedBusinesses.length) return null;
   const zones = assignedBusinesses.map(b => b.zone).filter(Boolean);
   if (!zones.length) return null;
@@ -1037,6 +1093,14 @@ function detectEmployeeZone() {
   const freq = {};
   zones.forEach(z => freq[z] = (freq[z]||0) + 1);
   return Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+async function detectEmployeeZoneFromDB() {
+  // Primary: use user_zones table
+  const { data } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username).limit(1);
+  if (data && data.length) return data[0].zone_key;
+  // Fallback: infer from assigned businesses
+  return detectEmployeeZone();
 }
 
 async function getNextAccountNumber() {
@@ -1070,8 +1134,8 @@ async function saveNewBizFromEntry() {
   if (!name) { showToast('Business name is required'); return; }
   if (!type) { showToast('Please select a business type'); return; }
 
-  const zoneKey = detectEmployeeZone();
-  if (!zoneKey) { showToast('Could not detect zone — make sure businesses are assigned to you'); return; }
+  const zoneKey = await detectEmployeeZoneFromDB();
+  if (!zoneKey) { showToast('Could not detect zone — ask the owner to assign your zones'); return; }
 
   const btn = document.getElementById('nb-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
@@ -1123,6 +1187,16 @@ async function saveNewBizFromEntry() {
   await onBizChange();
 }
 
+// ═══ ZONE MAP URL HELPER ═══
+async function getZoneMapUrl() {
+  // Get employee's assigned zones from user_zones table
+  const { data: empZones } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username).limit(1);
+  if (!empZones || !empZones.length) return null;
+  const zoneKey = empZones[0].zone_key;
+  const { data: mapRow } = await db.from('zone_map_links').select('url').eq('zone_key', zoneKey).single();
+  return mapRow?.url || null;
+}
+
 async function resetEntryForm() {
   answers = {}; selectedPhoto = null; selectedBiz = null;
   document.getElementById('bays-select').value = '';
@@ -1144,8 +1218,7 @@ async function resetEntryForm() {
   document.getElementById('prog-label').textContent = '0 answered';
   setGPS('waiting', 'Location will be captured on submit');
 
-  const { data: mapRow } = await db.from('map_links').select('url').eq('username', currentUser.username).single();
-  const url = mapRow?.url || '';
+  const url = (await getZoneMapUrl()) || '';
   document.getElementById('map-banner-yes').style.display = url ? 'flex' : 'none';
   document.getElementById('map-banner-no').style.display = url ? 'none' : 'block';
   if (url) document.getElementById('map-banner-link').href = url;
@@ -1208,6 +1281,10 @@ async function onBizChange() {
     window._lastVisitData = lastVisit;
     lvBtn.style.display = '';
     lvBtn.textContent = `🕐 Last Visit: ${lastVisit.entry_date}`;
+    // Autofill from last visit if fields are still empty
+    if (lastVisit.bays) document.getElementById('bays-select').value = lastVisit.bays;
+    if (lastVisit.visit_contact_name) document.getElementById('visit-contact-name').value = lastVisit.visit_contact_name;
+    if (lastVisit.visit_contact_position) document.getElementById('visit-contact-position').value = lastVisit.visit_contact_position;
   } else {
     window._lastVisitData = null;
     lvNone.style.display = '';
@@ -1416,8 +1493,7 @@ async function submitEntry() {
 
 // ═══ MAP ═══
 async function renderMapPane() {
-  const { data: mapRow } = await db.from('map_links').select('url').eq('username', currentUser.username).single();
-  const url = mapRow?.url || '';
+  const url = (await getZoneMapUrl()) || '';
   document.getElementById('map-url-pill').textContent = url || 'No map link set for today';
   document.getElementById('map-ext-link').href = url || '#';
   const area = document.getElementById('map-frame-area');
@@ -1465,6 +1541,7 @@ function entryHTML(e) {
       ${e.photo_url ? `<img class="entry-photo-thumb" src="${e.photo_url}" onclick="openLightbox('${e.photo_url}')" alt="Visit photo">` : ''}
       ${mapsUrl ? `<a class="entry-gps-link" href="${mapsUrl}" target="_blank">📍 View Location (±${Math.round(e.location_accuracy||0)}m)</a>` : '<span style="font-size:0.72rem;color:var(--text3);">📍 No GPS data</span>'}
       ${(e.gps_flag && currentUser?.role === 'owner') ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;margin-left:auto;" onclick="openGpsReviewModal(${JSON.stringify(e).replace(/"/g,'&quot;')})">🔍 Review GPS</button>` : ''}
+      ${currentUser?.role === 'owner' ? `<button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="openEditEntryModal(${JSON.stringify(e).replace(/"/g,'&quot;')})">✏️ Edit</button>` : ''}
     </div>
   </div>`;
 }
@@ -1517,6 +1594,8 @@ function setSentFilter(type, val) {
   if (type !== 'date') { document.getElementById('fc-date').value = ''; }
   const map = {all:'fc-all',unsent:'fc-unsent',sent:'fc-sent',flagged:'fc-flagged'};
   if (map[type]) document.getElementById(map[type]).classList.add('active');
+  const revertBtn = document.getElementById('btn-revert-date');
+  if (revertBtn) revertBtn.style.display = (type === 'date' && sentDateFilter) ? '' : 'none';
   applyFiltersAndRender();
 }
 
@@ -1525,6 +1604,20 @@ async function revertEntry(id, sentDate) {
   const { error } = await db.from('entries').update({ used_in_report_at: null }).eq('id', id);
   if (error) { showToast('Error reverting entry'); return; }
   showToast('Entry reverted to unsent ✓');
+  await renderAllEntries();
+}
+
+async function revertAllOnDate() {
+  if (!sentDateFilter) return;
+  const list = allEntries.filter(e => e.used_in_report_at &&
+    new Date(e.used_in_report_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) === sentDateFilter);
+  if (!list.length) { showToast('No entries found for this date'); return; }
+  if (!confirm(`Revert all ${list.length} entries sent on ${sentDateFilter} back to unsent? This will allow them to be included in a new report.`)) return;
+  const ids = list.map(e => e.id);
+  const { error } = await db.from('entries').update({ used_in_report_at: null }).in('id', ids);
+  if (error) { showToast('Error reverting entries'); return; }
+  showToast(`✓ ${list.length} entries reverted to unsent`);
+  setSentFilter('all');
   await renderAllEntries();
 }
 
@@ -1895,8 +1988,62 @@ async function renderUsersTab() {
       ${u.role!=='owner'?`<button class="btn btn-danger" onclick="removeEmployee('${u.username}')">Remove</button>`:''}`;
     ul.appendChild(row);
   }
+  await renderEmpZoneList();
   await renderAssignPills();
   await renderMapLinkEditor();
+}
+
+// ═══ EMPLOYEE ZONE ASSIGNMENTS ═══
+async function renderEmpZoneList() {
+  const c = document.getElementById('emp-zone-list'); if (!c) return;
+  c.innerHTML = '';
+  const { data: emps } = await db.from('users').select('*').eq('role','employee').order('username');
+  if (!emps || !emps.length) { c.innerHTML = '<div class="empty-state" style="padding:12px 0;">No employees yet.</div>'; return; }
+  // Get all distinct zones from businesses table
+  const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null);
+  const allBizZones = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
+  // Get all user_zone assignments
+  const { data: userZones } = await db.from('user_zones').select('*');
+  const assignedMap = {};
+  (userZones||[]).forEach(r => {
+    if (!assignedMap[r.username]) assignedMap[r.username] = new Set();
+    assignedMap[r.username].add(r.zone_key);
+  });
+  if (!allBizZones.length) {
+    c.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;padding:8px 0;">No zones found in business table yet.</div>';
+    return;
+  }
+  emps.forEach(u => {
+    const empZones = assignedMap[u.username] || new Set();
+    const div = document.createElement('div');
+    div.style.cssText = 'padding:12px 0;border-bottom:1px solid var(--border);';
+    const zonePills = allBizZones.map(z => {
+      const active = empZones.has(z);
+      const zObj = allZones.find(zo => z.toUpperCase().startsWith(zo.zone_key.toUpperCase()));
+      const label = zObj ? `${z} (${zObj.zone_name})` : z;
+      return `<button class="filter-chip${active?' active':''}" style="font-size:0.7rem;padding:4px 10px;" onclick="toggleEmpZone('${u.username}','${z}',this)">${label}</button>`;
+    }).join('');
+    div.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+      <div style="font-weight:700;font-size:0.85rem;">${u.display_name||u.username}</div>
+      <span style="font-size:0.72rem;color:var(--text3);">@${u.username}</span>
+      ${empZones.size ? `<span style="font-size:0.68rem;color:var(--teal);font-weight:700;">${empZones.size} zone${empZones.size>1?'s':''} assigned</span>` : '<span style="font-size:0.68rem;color:var(--text3);font-style:italic;">no zones assigned</span>'}
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">${zonePills}</div>`;
+    c.appendChild(div);
+  });
+}
+
+async function toggleEmpZone(username, zoneKey, btn) {
+  const active = btn.classList.contains('active');
+  if (active) {
+    await db.from('user_zones').delete().eq('username', username).eq('zone_key', zoneKey);
+    btn.classList.remove('active');
+  } else {
+    await db.from('user_zones').upsert({ username, zone_key: zoneKey }, { onConflict: 'username,zone_key' });
+    btn.classList.add('active');
+  }
+  // Refresh counts
+  await renderEmpZoneList();
 }
 
 async function renderAssignPills() {
@@ -2003,7 +2150,7 @@ async function addEmployee() {
 async function removeEmployee(username) {
   if(!confirm(`Remove "${username}"?`)) return;
   await db.from('business_assignments').delete().eq('username',username);
-  await db.from('map_links').delete().eq('username',username);
+  await db.from('user_zones').delete().eq('username',username);
   await db.from('users').delete().eq('username',username);
   if(assignTarget===username) assignTarget=null;
   await renderUsersTab(); showToast('Employee removed');
@@ -2011,34 +2158,37 @@ async function removeEmployee(username) {
 
 // ═══ MAP LINK EDITOR ═══
 async function renderMapLinkEditor() {
-  const c=document.getElementById('map-link-editor'); c.innerHTML='';
-  const { data: emps }=await db.from('users').select('*').eq('role','employee');
-  if(!emps||!emps.length) { c.innerHTML='<div style="font-size:0.8rem;color:var(--text3);font-style:italic;">Add employees first.</div>'; return; }
-  const { data: links }=await db.from('map_links').select('*');
-  const linkMap=Object.fromEntries((links||[]).map(l=>[l.username,l.url]));
-  emps.forEach(u => {
-    const url=linkMap[u.username]||'';
-    const div=document.createElement('div'); div.style.marginBottom='18px';
-    div.innerHTML=`<div class="field-label" style="margin-bottom:6px;">📍 Route for <strong>${u.display_name||u.username}</strong></div>
+  const c = document.getElementById('map-link-editor'); c.innerHTML = '';
+  const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null);
+  const zones = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
+  if (!zones.length) { c.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;">No zones found in business table yet.</div>'; return; }
+  const { data: links } = await db.from('zone_map_links').select('*');
+  const linkMap = Object.fromEntries((links||[]).map(l=>[l.zone_key, l.url]));
+  zones.forEach(z => {
+    const url = linkMap[z] || '';
+    const zObj = allZones.find(zo => z.toUpperCase().startsWith(zo.zone_key.toUpperCase()));
+    const label = zObj ? `${z} — ${zObj.zone_name}` : z;
+    const div = document.createElement('div'); div.style.marginBottom = '18px';
+    div.innerHTML = `<div class="field-label" style="margin-bottom:6px;">📍 Map for <strong>${label}</strong></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-        <input class="field-input" type="url" id="mapinput-${u.username}" placeholder="Paste Google Maps share link…" value="${url}" style="flex:1;min-width:180px;margin-bottom:0;font-size:0.82rem;">
-        <button class="btn btn-primary" onclick="saveMapLink('${u.username}')">Save</button>
-        ${url?`<button class="btn btn-danger" onclick="clearMapLink('${u.username}')">Clear</button>`:''}
+        <input class="field-input" type="url" id="mapinput-${z}" placeholder="Paste Google Maps share link…" value="${url}" style="flex:1;min-width:180px;margin-bottom:0;font-size:0.82rem;">
+        <button class="btn btn-primary" onclick="saveMapLink('${z}')">Save</button>
+        ${url?`<button class="btn btn-danger" onclick="clearMapLink('${z}')">Clear</button>`:''}
       </div>
       <div style="margin-top:5px;font-size:0.73rem;${url?'color:var(--teal)':'color:var(--text3);font-style:italic;'}">
-        ${url?`✓ Link set — <a href="${url}" target="_blank" style="color:var(--teal);">preview ↗</a>`:'No map set yet.'}
+        ${url?`✓ Link set — <a href="${url}" target="_blank" style="color:var(--teal);">preview ↗</a>`:'No map set for this zone yet.'}
       </div>`;
     c.appendChild(div);
   });
 }
-async function saveMapLink(username) {
-  const url=document.getElementById('mapinput-'+username).value.trim();
-  if(!url) { showToast('Paste a Google Maps URL first'); return; }
-  await db.from('map_links').upsert({username,url},{onConflict:'username'});
+async function saveMapLink(zoneKey) {
+  const url = document.getElementById('mapinput-' + zoneKey).value.trim();
+  if (!url) { showToast('Paste a Google Maps URL first'); return; }
+  await db.from('zone_map_links').upsert({ zone_key: zoneKey, url }, { onConflict: 'zone_key' });
   await renderMapLinkEditor(); showToast('Map link saved');
 }
-async function clearMapLink(username) {
-  await db.from('map_links').delete().eq('username',username);
+async function clearMapLink(zoneKey) {
+  await db.from('zone_map_links').delete().eq('zone_key', zoneKey);
   await renderMapLinkEditor(); showToast('Map link cleared');
 }
 
@@ -2104,6 +2254,64 @@ async function changePassword() {
   if(error) { showToast('Error updating password'); return; }
   document.getElementById('new-pw').value=''; document.getElementById('new-pw2').value='';
   showToast(`Password updated for ${username} ✓`);
+}
+
+// ═══ EDIT ENTRY MODAL ═══
+let _editEntry = null;
+
+function openEditEntryModal(entry) {
+  _editEntry = entry;
+  document.getElementById('ee-meta').textContent = `${entry.business} · ${entry.entry_date} at ${entry.entry_time} · by ${entry.display_name}`;
+  document.getElementById('ee-bays').value = entry.bays || '';
+  document.getElementById('ee-dealer').value = entry.purchase_from_dealer || '';
+  document.getElementById('ee-contact-name').value = entry.visit_contact_name || '';
+  document.getElementById('ee-contact-pos').value = entry.visit_contact_position || '';
+  document.getElementById('ee-notes').value = entry.notes || '';
+  // Q&A toggles
+  const qaWrap = document.getElementById('ee-qa-wrap');
+  const ans = entry.answers || [];
+  if (ans.length) {
+    qaWrap.innerHTML = `<div class="section-label" style="margin-bottom:8px;">Check-In Questions</div>` +
+      ans.map((a, i) => `
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
+            <input type="checkbox" id="ee-q-${i}" ${a.answer?'checked':''} style="width:16px;height:16px;accent-color:var(--teal);">
+            <span style="font-size:0.82rem;">${a.question}</span>
+          </label>
+        </div>`).join('');
+    qaWrap.style.display = 'block';
+  } else {
+    qaWrap.style.display = 'none';
+  }
+  document.getElementById('edit-entry-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeEditEntryModal() {
+  document.getElementById('edit-entry-modal').style.display = 'none';
+  document.body.style.overflow = '';
+  _editEntry = null;
+}
+
+async function saveEditEntry() {
+  if (!_editEntry) return;
+  const ans = (_editEntry.answers || []).map((a, i) => ({
+    question: a.question,
+    answer: document.getElementById(`ee-q-${i}`)?.checked ?? a.answer
+  }));
+  const payload = {
+    bays: document.getElementById('ee-bays').value || null,
+    purchase_from_dealer: document.getElementById('ee-dealer').value || null,
+    visit_contact_name: document.getElementById('ee-contact-name').value.trim() || null,
+    visit_contact_position: document.getElementById('ee-contact-pos').value || null,
+    notes: document.getElementById('ee-notes').value.trim() || null,
+    answers: ans,
+  };
+  const { error } = await db.from('entries').update(payload).eq('id', _editEntry.id);
+  if (error) { showToast('Error saving entry', true); console.error(error); return; }
+  showToast('Entry updated ✓');
+  closeEditEntryModal();
+  await renderAllEntries();
 }
 
 // ═══ GPS REVIEW MODAL ═══
