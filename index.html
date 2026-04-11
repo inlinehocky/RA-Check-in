@@ -437,21 +437,6 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </div>
         <button class="btn btn-primary btn-full" id="submit-btn" onclick="submitEntry()">Save Check-In ↗</button>
       </div>
-
-      <!-- OWNER ONLY: Revert visits by date -->
-      <div class="card" id="entry-revert-card" style="display:none;">
-        <div class="card-head">
-          <div>
-            <div class="card-title">↩ Revert Sent Visits by Date</div>
-            <div class="card-sub">Select a date to remove the sent status from all visits sent on that day, allowing them to be included in a new report.</div>
-          </div>
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-          <input type="date" class="field-input" id="entry-revert-date" style="margin-bottom:0;flex:1;min-width:160px;" onchange="onEntryRevertDateChange()">
-          <button class="btn btn-danger" id="entry-revert-btn" style="white-space:nowrap;" disabled onclick="revertByEntryDate()">↩ Revert All on Date</button>
-        </div>
-        <div id="entry-revert-info" style="margin-top:10px;font-size:0.78rem;color:var(--text3);font-style:italic;min-height:18px;"></div>
-      </div>
     </div>
   </div>
 
@@ -477,6 +462,21 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div class="report-panel">
         <div class="report-panel-title">📄 Generate Visit Report</div>
         <div class="report-grid" id="report-buttons"></div>
+      </div>
+
+      <!-- REVERT SENT VISITS BY DATE -->
+      <div class="card" id="entry-revert-card" style="display:none;">
+        <div class="card-head">
+          <div>
+            <div class="card-title">↩ Revert Sent Visits by Date</div>
+            <div class="card-sub">Select a date to remove the sent status from all visits sent on that day, allowing them to be included in a new report.</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
+          <input type="date" class="field-input" id="entry-revert-date" style="margin-bottom:0;flex:1;min-width:160px;" onchange="onEntryRevertDateChange()">
+          <button class="btn btn-danger" id="entry-revert-btn" style="white-space:nowrap;" disabled onclick="revertByEntryDate()">↩ Revert All on Date</button>
+        </div>
+        <div id="entry-revert-info" style="margin-top:10px;font-size:0.78rem;color:var(--text3);font-style:italic;min-height:18px;"></div>
       </div>
 
       <div class="card">
@@ -953,7 +953,6 @@ async function doLogin() {
   showScreen('screen-app');
   buildNav();
   document.getElementById('entry-date-sub').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-  document.getElementById('entry-revert-card').style.display = data.role === 'owner' ? '' : 'none';
   await loadZones();
   showTab('tab-entry');
 }
@@ -982,7 +981,10 @@ async function showTab(id) {
   const pane = document.getElementById(id); if (pane) pane.classList.add('active');
   if (id === 'tab-entry') await resetEntryForm();
   if (id === 'tab-map') await renderMapPane();
-  if (id === 'tab-all-entries') await renderAllEntries();
+  if (id === 'tab-all-entries') {
+    document.getElementById('entry-revert-card').style.display = currentUser?.role === 'owner' ? '' : 'none';
+    await renderAllEntries();
+  }
   if (id === 'tab-businesses') await renderBusinessDirectory();
   if (id === 'tab-users') await renderUsersTab();
   if (id === 'tab-questions') await renderQEditor();
