@@ -930,6 +930,29 @@ async function init() {
   const { error } = await db.from('users').select('id').limit(1);
   showLoading(false);
   if (error) { showScreen('screen-login'); document.getElementById('login-error').textContent = 'Cannot reach database.'; return; }
+  // Restore saved session
+  const saved = localStorage.getItem('raparts_user');
+  if (saved) {
+    try {
+      const data = JSON.parse(saved);
+      // Verify user still exists in DB
+      const { data: check, error: checkErr } = await db.from('users').select('*').eq('username', data.username).single();
+      if (!checkErr && check) {
+        currentUser = check;
+        localStorage.setItem('raparts_user', JSON.stringify(check)); // refresh with latest data
+        const badge = document.getElementById('topbar-badge');
+        badge.textContent = check.display_name || check.username;
+        badge.className = 'user-badge' + (check.role === 'owner' ? ' owner' : '');
+        showScreen('screen-app');
+        buildNav();
+        document.getElementById('entry-date-sub').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        await loadZones();
+        showTab('tab-entry');
+        return;
+      }
+    } catch(e) {}
+    localStorage.removeItem('raparts_user');
+  }
   showScreen('screen-login');
 }
 function showLoading(on) { document.getElementById('loading-overlay').style.display = on ? 'flex' : 'none'; }
@@ -947,6 +970,7 @@ async function doLogin() {
   if (error || !data) { document.getElementById('login-error').textContent = 'Incorrect username or password.'; return; }
   document.getElementById('login-error').textContent = '';
   currentUser = data;
+  localStorage.setItem('raparts_user', JSON.stringify(data));
   const badge = document.getElementById('topbar-badge');
   badge.textContent = data.display_name || data.username;
   badge.className = 'user-badge' + (data.role === 'owner' ? ' owner' : '');
@@ -958,6 +982,7 @@ async function doLogin() {
 }
 function doLogout() {
   currentUser = null; answers = {}; questions = []; selectedPhoto = null; selectedBiz = null;
+  localStorage.removeItem('raparts_user');
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
   showScreen('screen-login');
