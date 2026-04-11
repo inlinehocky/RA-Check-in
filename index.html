@@ -402,12 +402,10 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </div>
           <div>
             <button class="btn btn-danger" id="revert-date-btn" onclick="revertByDate()" disabled
-              style="border:1.5px solid var(--red);background:var(--red-dim);padding:12px 20px;font-size:0.85rem;width:100%;">
-              ↩ Revert All on This Date
-            </button>
+              style="opacity:0.5;cursor:not-allowed;">↩ Revert Visits</button>
           </div>
         </div>
-        <div id="revert-date-preview" style="margin-top:12px;font-size:0.78rem;color:var(--text3);font-style:italic;min-height:18px;"></div>
+        <div id="revert-date-preview" style="margin-top:10px;font-size:0.78rem;color:var(--text2);min-height:1.4em;"></div>
       </div>
     </div>
   </div>
@@ -626,6 +624,7 @@ async function doLogin() {
   showScreen('screen-app');
   buildNav();
   document.getElementById('entry-date-sub').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  document.getElementById('revert-date-card').style.display = data.role === 'owner' ? '' : 'none';
   await loadQuestions();
   showTab('tab-entry');
 }
@@ -670,12 +669,6 @@ async function loadQuestions() {
 // ═══ ENTRY FORM ═══
 async function resetEntryForm() {
   answers = {}; selectedPhoto = null; selectedBiz = null;
-  // Show owner revert tool
-  const revertCard = document.getElementById('revert-date-card');
-  if (revertCard) revertCard.style.display = currentUser?.role === 'owner' ? 'block' : 'none';
-  document.getElementById('revert-date-input') && (document.getElementById('revert-date-input').value = '');
-  document.getElementById('revert-date-preview') && (document.getElementById('revert-date-preview').textContent = '');
-  if (document.getElementById('revert-date-btn')) document.getElementById('revert-date-btn').disabled = true;
   document.getElementById('bays-select').value = '';
   document.getElementById('entry-notes').value = '';
   document.getElementById('photo-preview').style.display = 'none';
@@ -1309,45 +1302,45 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-// ═══ REVERT BY DATE ═══
+// ═══ REVERT SENT VISITS BY DATE (owner) ═══
 async function onRevertDateChange() {
-  const dateVal = document.getElementById('revert-date-input').value;
-  const btn = document.getElementById('revert-date-btn');
+  const val = document.getElementById('revert-date-input').value;
   const preview = document.getElementById('revert-date-preview');
-  if (!dateVal) { btn.disabled = true; preview.textContent = ''; return; }
-  // Count entries with used_in_report_at matching this date (stored as ISO string, date portion)
-  const dayStart = dateVal + 'T00:00:00.000Z';
-  const dayEnd   = dateVal + 'T23:59:59.999Z';
-  const { count, error } = await db.from('entries')
-    .select('*', { count: 'exact', head: true })
+  const btn = document.getElementById('revert-date-btn');
+  btn.disabled = true;
+  btn.style.opacity = '0.5';
+  btn.style.cursor = 'not-allowed';
+  if (!val) { preview.textContent = ''; return; }
+  const dayStart = val + 'T00:00:00.000Z';
+  const dayEnd   = val + 'T23:59:59.999Z';
+  const { data, error } = await db.from('entries')
+    .select('id', { count: 'exact' })
     .not('used_in_report_at', 'is', null)
     .gte('used_in_report_at', dayStart)
     .lte('used_in_report_at', dayEnd);
-  if (error) { preview.textContent = 'Error checking entries.'; btn.disabled = true; return; }
-  if (!count || count === 0) {
-    preview.textContent = 'No sent visits found on this date.';
-    btn.disabled = true;
+  if (error) { preview.textContent = '⚠ Error checking entries.'; return; }
+  const count = (data || []).length;
+  const label = new Date(val + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  if (count === 0) {
+    preview.textContent = `No sent visits found on ${label}.`;
   } else {
-    const label = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-    preview.innerHTML = `<span style="color:var(--gold);">⚠ ${count} visit${count === 1 ? '' : 's'} marked sent on ${label} will be reverted.</span>`;
+    preview.textContent = `⚠ ${count} visit${count !== 1 ? 's' : ''} marked sent on ${label} will be reverted.`;
     btn.disabled = false;
+    btn.style.opacity = '';
+    btn.style.cursor = '';
   }
 }
 
 async function revertByDate() {
-  const dateVal = document.getElementById('revert-date-input').value;
-  if (!dateVal) return;
-  const label = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-  const dayStart = dateVal + 'T00:00:00.000Z';
-  const dayEnd   = dateVal + 'T23:59:59.999Z';
-  // Re-count to show accurate number in confirm dialog
-  const { count } = await db.from('entries')
-    .select('*', { count: 'exact', head: true })
-    .not('used_in_report_at', 'is', null)
-    .gte('used_in_report_at', dayStart)
-    .lte('used_in_report_at', dayEnd);
-  if (!count || count === 0) { showToast('No sent visits found on this date'); return; }
-  if (!confirm(`Revert all ${count} visits sent on ${label} back to unsent?\n\nThey will be available to include in a new PDF report.`)) return;
+  const val = document.getElementById('revert-date-input').value;
+  if (!val) return;
+  const label = new Date(val + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const preview = document.getElementById('revert-date-preview');
+  const countMatch = preview.textContent.match(/^⚠ (\d+)/);
+  const count = countMatch ? countMatch[1] : 'all';
+  if (!confirm(`Revert ${count} visit(s) sent on ${label} back to unsent? They will be eligible for future reports.`)) return;
+  const dayStart = val + 'T00:00:00.000Z';
+  const dayEnd   = val + 'T23:59:59.999Z';
   const { error } = await db.from('entries')
     .update({ used_in_report_at: null })
     .not('used_in_report_at', 'is', null)
@@ -1357,7 +1350,8 @@ async function revertByDate() {
   showToast(`↩ ${count} visits reverted on ${label} ✓`);
   document.getElementById('revert-date-input').value = '';
   document.getElementById('revert-date-preview').textContent = '';
-  document.getElementById('revert-date-btn').disabled = true;
+  const btn = document.getElementById('revert-date-btn');
+  btn.disabled = true; btn.style.opacity = '0.5'; btn.style.cursor = 'not-allowed';
 }
 
 init();
