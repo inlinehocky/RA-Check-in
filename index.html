@@ -482,7 +482,11 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div class="card">
         <div class="card-head">
           <div class="card-title">📊 All Entries</div>
-          <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
+            <button class="btn btn-teal" onclick="document.getElementById('import-entries-input').click()">⬆ Import Entries</button>
+            <input type="file" id="import-entries-input" accept=".xlsx,.csv" style="display:none;" onchange="importEntriesFile(event)">
+          </div>
         </div>
         <!-- Employee filter -->
         <div class="filter-row" id="all-filters"></div>
@@ -1854,6 +1858,93 @@ function openLightbox(url) { document.getElementById('lightbox-img').src = url; 
 function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
 
 // ═══ EXPORT CSV ═══
+// ═══ IMPORT ENTRIES ═══
+async function importEntriesFile(e) {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+
+  showToast('Reading file…');
+
+  // Use SheetJS to parse xlsx/csv
+  const XLSX = await new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = reject;
+    if (window.XLSX) { resolve(window.XLSX); return; }
+    document.head.appendChild(s);
+  });
+
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: null });
+
+  if (!rows.length) { showToast('No data found in file', true); return; }
+
+  // Fetch all businesses to look up zone + business_type by account_number
+  const { data: bizList } = await db.from('businesses').select('account_number, business_type, zone');
+  const bizMap = {};
+  (bizList || []).forEach(b => { bizMap[String(b.account_number)] = b; });
+
+  // Helper: parse Access #date# format or ISO string to ISO string
+  function parseDate(val) {
+    if (!val) return null;
+    const s = String(val).trim();
+    // Access format: #01/01/2026#
+    const accessMatch = s.match(/^#(\d{1,2})\/(\d{1,2})\/(\d{4})#$/);
+    if (accessMatch) {
+      const [, m, d, y] = accessMatch;
+      return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00.000Z`;
+    }
+    // Already ISO or parseable date string
+    const dt = new Date(s);
+    if (!isNaN(dt.getTime())) return dt.toISOString();
+    return null;
+  }
+
+  // Map Excel rows to entries table columns
+  const records = rows.map(row => {
+    const acct = String(row['account_number'] ?? row['AccountNumber'] ?? '').trim();
+    const biz = bizMap[acct] || {};
+    return {
+      account_number:        acct || null,
+      business:              String(row['business'] ?? row['Business'] ?? '').trim() || null,
+      business_type:         biz.business_type || null,
+      zone:                  biz.zone || row['zone'] || null,
+      bays:                  row['bays'] || row['Bays'] || null,
+      visit_contact_name:    row['visit_contact_name'] || row['VisitContactName'] || null,
+      visit_contact_position:row['visit_contact_position'] || row['VisitContactPosition'] || null,
+      purchase_from_dealer:  row['purchase_from_dealer'] || row['purchase_from_dealse'] || row['PurchaseFromDealer'] || null,
+      notes:                 row['notes'] || row['Notes'] || null,
+      entry_date:            row['entry_date'] || row['EntryDate'] || null,
+      entry_time:            row['entry_time'] || row['EntryTime'] || null,
+      username:              row['username'] || row['Username'] || null,
+      display_name:          row['display_name'] || row['DisplayName'] || null,
+      used_in_report_at:     parseDate(row['used_in_report_at'] || row['UsedInReportAt']),
+    };
+  }).filter(r => r.account_number);
+
+  if (!records.length) { showToast('No valid rows found — check account_number column', true); return; }
+
+  // Batch insert in groups of 50
+  let inserted = 0, errors = 0;
+  for (let i = 0; i < records.length; i += 50) {
+    const batch = records.slice(i, i + 50);
+    const { error } = await db.from('entries').insert(batch);
+    if (error) { errors += batch.length; console.error('Import error:', error); }
+    else inserted += batch.length;
+  }
+
+  if (errors > 0) {
+    showToast(`Imported ${inserted} entries (${errors} failed — check console)`, true);
+  } else {
+    showToast(`✓ ${inserted} entries imported successfully`);
+  }
+  await renderAllEntries();
+}
+
 function exportCSV() {
   let list = allFilter === 'all' ? allEntries : allEntries.filter(e => e.username === allFilter);
   if (sentFilter === 'unsent') list = list.filter(e => !e.used_in_report_at);
