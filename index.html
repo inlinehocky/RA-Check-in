@@ -712,6 +712,113 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
     </div>
   </div>
 
+  <!-- TAB: Help -->
+  <div class="tab-pane" id="tab-help">
+    <div class="tab-scroll">
+
+      <div class="card">
+        <div class="card-head"><div><div class="card-title">📖 RA Parts Solutions — Help Guide</div>
+          <div class="card-sub">How to use the field sales visit tracking app.</div></div></div>
+        <p style="font-size:0.82rem;color:var(--text2);line-height:1.7;margin-top:4px;">
+          This app tracks field sales visits to Mechanical and Collision shops. Employees check in at each business, record visit details, and answer questions. Owners generate PDF reports and manage the system.
+        </p>
+      </div>
+
+      <!-- EMPLOYEE SECTION -->
+      <div class="card">
+        <div class="card-title" style="margin-bottom:14px;">👤 For Employees</div>
+
+        <div class="section-label">📋 Recording a Visit</div>
+        <ol style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-bottom:16px;">
+          <li>Tap <strong>📋 New Entry</strong> at the top.</li>
+          <li>Select the business from the <strong>Business</strong> dropdown. Fields will auto-fill from your last visit.</li>
+          <li>Update <strong>Number of Bays</strong>, <strong>Visit Contact Name</strong>, <strong>Position</strong>, and <strong>Dealer Purchases</strong> as needed.</li>
+          <li>Tap <strong>📍 Capture GPS</strong> if prompted, or it will be captured automatically on submit.</li>
+          <li>Optionally take a <strong>Visit Photo</strong> by tapping the photo area.</li>
+          <li>Answer the <strong>Check-In Questions</strong> — tap each question to toggle Yes/No.</li>
+          <li>Add any <strong>Notes</strong> (optional).</li>
+          <li>Tap <strong>Save Check-In ↗</strong> to submit.</li>
+        </ol>
+
+        <div class="section-label">🏢 Adding a New Business</div>
+        <p style="font-size:0.82rem;color:var(--text2);line-height:1.7;margin-bottom:16px;">
+          If a business isn't in your dropdown, tap <strong>+ New Business</strong> at the top right of the New Entry card. Fill in the name and details — the zone will be assigned automatically based on your zone assignment. You cannot change the zone yourself.
+        </p>
+
+        <div class="section-label">🗺️ Route Map</div>
+        <p style="font-size:0.82rem;color:var(--text2);line-height:1.7;margin-bottom:4px;">
+          Tap <strong>🗺️ Route Map</strong> to open the Google Maps link your owner has set for your zone. Use this to navigate your assigned territory for the day.
+        </p>
+      </div>
+
+      <!-- OWNER SECTION -->
+      <div id="help-owner-section" style="display:none;">
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">👑 For Owners</div>
+
+          <div class="section-label">📊 All Entries</div>
+          <ul style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-bottom:16px;">
+            <li>View, filter, and export all visit entries across all employees.</li>
+            <li>Filter by <strong>employee</strong>, <strong>status</strong> (All / Unsent / Sent / GPS Flagged), or <strong>sent date</strong>.</li>
+            <li>Click <strong>✏️ Edit</strong> on any entry to correct bays, contacts, notes, or question answers.</li>
+            <li>Click a <strong>✓ Sent</strong> badge to revert a single entry back to unsent.</li>
+            <li>Use <strong>↩ Revert All on Date</strong> to un-send an entire batch so you can regenerate the PDF.</li>
+            <li>Click <strong>🔍 Review GPS</strong> on flagged entries to compare visit vs business coordinates and update the business location if needed.</li>
+            <li><strong>⬇ Export CSV</strong> downloads all visible entries as a spreadsheet.</li>
+            <li><strong>⬆ Import Entries</strong> imports historical visit records from an Excel file.</li>
+          </ul>
+
+          <div class="section-label">📄 Generating Reports</div>
+          <ol style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-bottom:16px;">
+            <li>Go to <strong>📊 All Entries</strong>.</li>
+            <li>In the <strong>Generate Visit Report</strong> panel, click the button for the zone and type (Mechanical or Collision) you want to report on.</li>
+            <li>The app randomly selects the configured number of <em>unsent</em> entries for that zone, marks them as sent, and opens a print-ready PDF.</li>
+            <li>Print or save the PDF from your browser's print dialog.</li>
+            <li>To redo a report, use <strong>↩ Revert All on Date</strong> to un-send the entries first.</li>
+          </ol>
+
+          <div class="section-label">🏢 Managing Businesses</div>
+          <ul style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-bottom:16px;">
+            <li>Add, edit, or delete businesses from the <strong>🏢 Businesses</strong> tab.</li>
+            <li>Zone dropdown shows all zones currently in use. Select <strong>+ Add new zone…</strong> to create one.</li>
+            <li><strong>Import from CSV</strong> — columns: <code style="font-size:0.75rem;">account_number, business_type, business_name, address, city, state, zip, phone, email, contact_name, zone, latitude, longitude</code>. Duplicate account numbers are automatically deduplicated.</li>
+          </ul>
+
+          <div class="section-label">👥 Managing Employees</div>
+          <ul style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-bottom:16px;">
+            <li><strong>Employee Zone Assignments</strong> — toggle which zone(s) each employee covers. This controls their map link and the zone auto-assigned when they add a new business.</li>
+            <li><strong>Assign Businesses</strong> — pick an employee, optionally filter by zone, then use <em>✓ Assign All in Zone</em> or toggle individual businesses. <em>✕ Remove All Assigned</em> clears everything regardless of zone filter.</li>
+            <li><strong>Zone Route Maps</strong> — paste a Google Maps share link for each zone. Employees see their zone's map automatically.</li>
+          </ul>
+
+          <div class="section-label">📍 Zones</div>
+          <p style="font-size:0.82rem;color:var(--text2);line-height:1.7;margin-bottom:16px;">
+            Zones group businesses for reporting and routing. Zone keys can be any text (e.g. <code style="font-size:0.75rem;">DAL</code>, <code style="font-size:0.75rem;">FTW01</code>, <code style="font-size:0.75rem;">HOU</code>). Reports use prefix matching — zone <code style="font-size:0.75rem;">DAL</code> includes businesses in <code style="font-size:0.75rem;">DAL</code>, <code style="font-size:0.75rem;">DAL01</code>, <code style="font-size:0.75rem;">DAL_D2</code>, etc.
+          </p>
+
+          <div class="section-label">⚙️ Settings</div>
+          <ul style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-bottom:4px;">
+            <li><strong>Report Settings</strong> — set how many visits are included per report type (default: 8 Mechanical, 20 Collision).</li>
+            <li><strong>Change Password</strong> — reset the password for any user account.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px;">⚠️ GPS Flagging</div>
+          <p style="font-size:0.82rem;color:var(--text2);line-height:1.7;">
+            When an employee submits a check-in, the app compares their GPS location to the stored business coordinates. If the distance exceeds <strong>300 feet</strong>, the entry is flagged with a ⚠️ GPS badge. As the owner you can:
+          </p>
+          <ul style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-top:8px;">
+            <li>Click <strong>🔍 Review GPS</strong> to see both coordinates on a map.</li>
+            <li>Update the business's stored location to match the visit coordinates.</li>
+            <li>Or clear the flag without updating if the visit location was correct.</li>
+          </ul>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
 </div>
 
 <!-- LAST VISIT MODAL -->
@@ -806,6 +913,26 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
     <div id="ee-qa-wrap" style="margin-bottom:14px;"></div>
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn btn-primary btn-full" onclick="saveEditEntry()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT ENTRIES MODAL -->
+<div id="import-entries-modal" style="display:none;position:fixed;inset:0;z-index:9987;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);">
+  <div style="width:100%;max-width:480px;background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:1rem;font-weight:800;">⬆ Import Entries</div>
+      <button onclick="closeImportEntriesModal()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <div id="import-modal-summary" style="font-size:0.78rem;color:var(--text2);margin-bottom:18px;line-height:1.6;"></div>
+    <div class="form-group">
+      <div class="field-label">Default Employee for records with no username</div>
+      <div style="font-size:0.72rem;color:var(--text3);margin-bottom:6px;font-style:italic;">Records that already have a username will keep their own value.</div>
+      <select class="field-input" id="import-default-user" style="margin-bottom:0;"></select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px;">
+      <button class="btn btn-primary btn-full" onclick="runImportEntries()">Import Now</button>
+      <button class="btn btn-outline" style="min-width:80px;" onclick="closeImportEntriesModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -996,8 +1123,8 @@ function doLogout() {
 function buildNav() {
   const nav = document.getElementById('nav-tabs'); nav.innerHTML = '';
   const tabs = currentUser.role === 'owner'
-    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones'],['tab-settings','⚙️ Settings']]
-    : [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map']];
+    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones'],['tab-settings','⚙️ Settings'],['tab-help','❓ Help']]
+    : [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-help','❓ Help']];
   tabs.forEach(([id, label]) => {
     const b = document.createElement('div');
     b.className = 'nav-tab'; b.textContent = label; b.dataset.tab = id;
@@ -1019,6 +1146,10 @@ async function showTab(id) {
   if (id === 'tab-questions') await renderQEditor();
   if (id === 'tab-zones') await renderZonesTab();
   if (id === 'tab-settings') await renderSettingsTab();
+  if (id === 'tab-help') {
+    const ownerSection = document.getElementById('help-owner-section');
+    if (ownerSection) ownerSection.style.display = currentUser?.role === 'owner' ? '' : 'none';
+  }
 }
 
 // ═══ ZONES ═══
@@ -1859,6 +1990,8 @@ function closeLightbox() { document.getElementById('lightbox').classList.remove(
 
 // ═══ EXPORT CSV ═══
 // ═══ IMPORT ENTRIES ═══
+let _importRecords = null;
+
 async function importEntriesFile(e) {
   const file = e.target.files[0];
   e.target.value = '';
@@ -1866,13 +1999,12 @@ async function importEntriesFile(e) {
 
   showToast('Reading file…');
 
-  // Use SheetJS to parse xlsx/csv
   const XLSX = await new Promise((resolve, reject) => {
+    if (window.XLSX) { resolve(window.XLSX); return; }
     const s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
     s.onload = () => resolve(window.XLSX);
     s.onerror = reject;
-    if (window.XLSX) { resolve(window.XLSX); return; }
     document.head.appendChild(s);
   });
 
@@ -1883,68 +2015,172 @@ async function importEntriesFile(e) {
 
   if (!rows.length) { showToast('No data found in file', true); return; }
 
-  // Fetch all businesses to look up zone + business_type by account_number
   const { data: bizList } = await db.from('businesses').select('account_number, business_type, zone');
   const bizMap = {};
   (bizList || []).forEach(b => { bizMap[String(b.account_number)] = b; });
 
-  // Helper: parse Access #date# format or ISO string to ISO string
+  // Find accounts in the file that don't exist in businesses table and create stubs
+  const seenAccounts = new Set();
+  const stubsToCreate = [];
+  rows.forEach(row => {
+    const acct = String(row['account_number'] ?? row['AccountNumber'] ?? '').trim();
+    if (!acct || seenAccounts.has(acct)) return;
+    seenAccounts.add(acct);
+    if (!bizMap[acct]) {
+      const bizName = String(row['business'] ?? row['Business'] ?? '').trim() || null;
+      const zone = row['zone'] || row['Zone'] || null;
+      stubsToCreate.push({
+        account_number: acct,
+        business_name:  bizName || `Imported Business ${acct}`,
+        zone:           zone ? String(zone).trim() : null,
+      });
+    }
+  });
+
+  if (stubsToCreate.length) {
+    showToast(`Creating ${stubsToCreate.length} missing business records…`);
+    for (let i = 0; i < stubsToCreate.length; i += 50) {
+      const { error } = await db.from('businesses')
+        .upsert(stubsToCreate.slice(i, i + 50), { onConflict: 'account_number' });
+      if (error) console.error('Stub business create error:', error);
+      else stubsToCreate.slice(i, i + 50).forEach(b => { bizMap[b.account_number] = b; });
+    }
+  }
+
   function parseDate(val) {
     if (!val) return null;
     const s = String(val).trim();
-    // Access format: #01/01/2026#
-    const accessMatch = s.match(/^#(\d{1,2})\/(\d{1,2})\/(\d{4})#$/);
-    if (accessMatch) {
-      const [, m, d, y] = accessMatch;
-      return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}T00:00:00.000Z`;
-    }
-    // Already ISO or parseable date string
+    const m = s.match(/^#(\d{1,2})\/(\d{1,2})\/(\d{4})#$/);
+    if (m) return `${m[3]}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}T00:00:00.000Z`;
     const dt = new Date(s);
-    if (!isNaN(dt.getTime())) return dt.toISOString();
-    return null;
+    return isNaN(dt.getTime()) ? null : dt.toISOString();
   }
 
-  // Map Excel rows to entries table columns
-  const records = rows.map(row => {
+  _importRecords = rows.map(row => {
     const acct = String(row['account_number'] ?? row['AccountNumber'] ?? '').trim();
     const biz = bizMap[acct] || {};
     return {
-      account_number:        acct || null,
-      business:              String(row['business'] ?? row['Business'] ?? '').trim() || null,
-      business_type:         biz.business_type || null,
-      zone:                  biz.zone || row['zone'] || null,
-      bays:                  row['bays'] || row['Bays'] || null,
-      visit_contact_name:    row['visit_contact_name'] || row['VisitContactName'] || null,
-      visit_contact_position:row['visit_contact_position'] || row['VisitContactPosition'] || null,
-      purchase_from_dealer:  row['purchase_from_dealer'] || row['purchase_from_dealse'] || row['PurchaseFromDealer'] || null,
-      notes:                 row['notes'] || row['Notes'] || null,
-      entry_date:            row['entry_date'] || row['EntryDate'] || null,
-      entry_time:            row['entry_time'] || row['EntryTime'] || null,
-      username:              row['username'] || row['Username'] || null,
-      display_name:          row['display_name'] || row['DisplayName'] || null,
-      used_in_report_at:     parseDate(row['used_in_report_at'] || row['UsedInReportAt']),
+      account_number:         acct || null,
+      business:               String(row['business'] ?? row['Business'] ?? '').trim() || null,
+      business_type:          biz.business_type || null,
+      zone:                   biz.zone || row['zone'] || null,
+      bays:                   row['bays'] || row['Bays'] || null,
+      visit_contact_name:     row['visit_contact_name'] || row['VisitContactName'] || null,
+      visit_contact_position: row['visit_contact_position'] || row['VisitContactPosition'] || null,
+      purchase_from_dealer:   row['purchase_from_dealer'] || row['purchase_from_dealse'] || row['PurchaseFromDealer'] || null,
+      notes:                  row['notes'] || row['Notes'] || null,
+      entry_date:             (() => {
+        const raw = row['entry_date'] || row['EntryDate'] || row['dateofvisit'] || row['DateOfVisit'] || row['date_of_visit'];
+        if (!raw) return null;
+        const s = String(raw).trim();
+        // If it contains a time component, take just the date part
+        const dt = new Date(s);
+        if (!isNaN(dt.getTime())) return dt.toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+        return s.split(/[T ]/)[0] || null;
+      })(),
+      entry_time:             (() => {
+        const raw = row['entry_time'] || row['EntryTime'] || row['dateofvisit'] || row['DateOfVisit'] || row['date_of_visit'];
+        if (!raw) return null;
+        const s = String(raw).trim();
+        const dt = new Date(s);
+        if (!isNaN(dt.getTime())) return dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        // If there's a time portion after a space or T, extract it
+        const parts = s.split(/[T ]/);
+        return parts.length > 1 ? parts.slice(1).join(' ') : null;
+      })(),
+      username:               row['username'] || row['Username'] || null,
+      display_name:           row['display_name'] || row['DisplayName'] || null,
+      used_in_report_at:      parseDate(row['used_in_report_at'] || row['UsedInReportAt']),
     };
   }).filter(r => r.account_number);
 
-  if (!records.length) { showToast('No valid rows found — check account_number column', true); return; }
+  if (!_importRecords.length) { showToast('No valid rows found — check account_number column', true); return; }
 
-  // Batch insert in groups of 50
+  const nullUserCount = _importRecords.filter(r => !r.username).length;
+
+  const { data: emps } = await db.from('users').select('username, display_name').order('display_name');
+  const sel = document.getElementById('import-default-user');
+  sel.innerHTML = (emps || []).map(u =>
+    `<option value="${u.username}">${u.display_name || u.username} (@${u.username})</option>`
+  ).join('');
+
+  document.getElementById('import-modal-summary').innerHTML = `
+    <strong>${_importRecords.length}</strong> records ready to import.<br>
+    ${stubsToCreate.length > 0
+      ? `<span style="color:var(--teal);">✓ ${stubsToCreate.length} missing business record${stubsToCreate.length !== 1 ? 's' : ''} created as stubs.</span><br>`
+      : ''}
+    ${nullUserCount > 0
+      ? `<span style="color:var(--gold);">⚠ ${nullUserCount} record${nullUserCount !== 1 ? 's' : ''} have no username</span> — select an employee below to assign them.`
+      : `<span style="color:var(--teal);">✓ All records have a username assigned.</span>`}
+  `;
+
+  document.getElementById('import-entries-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeImportEntriesModal() {
+  document.getElementById('import-entries-modal').style.display = 'none';
+  document.body.style.overflow = '';
+  _importRecords = null;
+}
+
+async function runImportEntries() {
+  if (!_importRecords) return;
+  const defaultUser = document.getElementById('import-default-user').value;
+  const { data: userData } = await db.from('users').select('username, display_name').eq('username', defaultUser).single();
+  const defaultDisplayName = userData?.display_name || defaultUser;
+
+  // Apply default user to records missing a username
+  const records = _importRecords.map(r => ({
+    ...r,
+    username:     r.username     || defaultUser,
+    display_name: r.display_name || defaultDisplayName,
+  }));
+
+  closeImportEntriesModal();
+  showToast(`Checking for duplicates…`);
+
+  // Fetch existing entries' account_number + used_in_report_at to avoid re-importing
+  const { data: existing } = await db.from('entries')
+    .select('account_number, used_in_report_at')
+    .not('used_in_report_at', 'is', null);
+
+  const existingKeys = new Set(
+    (existing || []).map(e => `${e.account_number}||${e.used_in_report_at}`)
+  );
+
+  // Keep: rows whose account+used_in_report_at combo isn't already in the DB
+  // Always keep rows where used_in_report_at is null (unsent visits — no natural dedup key)
+  const toInsert = records.filter(r => {
+    if (!r.used_in_report_at) return true; // null dates always imported
+    return !existingKeys.has(`${r.account_number}||${r.used_in_report_at}`);
+  });
+
+  const skipped = records.length - toInsert.length;
+
+  if (!toInsert.length) {
+    showToast(`All ${records.length} records already exist — nothing imported`);
+    await renderAllEntries();
+    return;
+  }
+
+  showToast(`Importing ${toInsert.length} entries${skipped > 0 ? ` (${skipped} duplicates skipped)` : ''}…`);
+
   let inserted = 0, errors = 0;
-  for (let i = 0; i < records.length; i += 50) {
-    const batch = records.slice(i, i + 50);
+  for (let i = 0; i < toInsert.length; i += 50) {
+    const batch = toInsert.slice(i, i + 50);
     const { error } = await db.from('entries').insert(batch);
-    if (error) { errors += batch.length; console.error('Import error:', error); }
+    if (error) { errors += batch.length; console.error('Import batch error:', error); }
     else inserted += batch.length;
   }
 
   if (errors > 0) {
     showToast(`Imported ${inserted} entries (${errors} failed — check console)`, true);
   } else {
-    showToast(`✓ ${inserted} entries imported successfully`);
+    showToast(`✓ ${inserted} entries imported${skipped > 0 ? `, ${skipped} duplicates skipped` : ''}`);
   }
   await renderAllEntries();
 }
-
 function exportCSV() {
   let list = allFilter === 'all' ? allEntries : allEntries.filter(e => e.username === allFilter);
   if (sentFilter === 'unsent') list = list.filter(e => !e.used_in_report_at);
