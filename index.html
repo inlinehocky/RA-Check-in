@@ -1073,29 +1073,21 @@ async function init() {
   if (error) { showScreen('screen-login'); document.getElementById('login-error').textContent = 'Cannot reach database.'; return; }
   // Restore saved session
   const saved = localStorage.getItem('raparts_user');
-  if (saved) {
+  const creds = localStorage.getItem('raparts_creds');
+  if (saved && creds) {
     try {
       const data = JSON.parse(saved);
-      // Re-verify against DB and re-establish session variables for RLS
-      const { data: check, error: checkErr } = await db.from('users').select('*').eq('username', data.username).single();
-      if (!checkErr && check) {
-        // Re-set session variables by calling set_app_user won't work without password,
-        // so we fetch fresh user data and rely on the stored password being valid.
-        // Use stored session to restore UI, but prompt re-login if any DB call fails.
-        currentUser = check;
-        localStorage.setItem('raparts_user', JSON.stringify(check));
-        const badge = document.getElementById('topbar-badge');
-        badge.textContent = check.display_name || check.username;
-        badge.className = 'user-badge' + (check.role === 'owner' ? ' owner' : '');
-        showScreen('screen-app');
-        buildNav();
-        document.getElementById('entry-date-sub').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        await loadZones();
-        showTab('tab-entry');
+      const { u, p } = JSON.parse(creds);
+      // Re-call set_app_user to re-establish Postgres session variables for RLS
+      const { data: refreshed, error: rpcErr } = await db.rpc('set_app_user', { p_username: u, p_password: p });
+      if (!rpcErr && refreshed) {
+        localStorage.setItem('raparts_user', JSON.stringify(refreshed));
+        await completeLogin(refreshed);
         return;
       }
     } catch(e) {}
     localStorage.removeItem('raparts_user');
+    localStorage.removeItem('raparts_creds');
   }
   showScreen('screen-login');
 }
@@ -1109,11 +1101,12 @@ async function doLogin() {
   if (!u || !p) { document.getElementById('login-error').textContent = 'Enter username and password.'; return; }
   const btn = document.getElementById('login-btn');
   btn.disabled = true; btn.textContent = 'Signing in…';
-  // set_app_user validates credentials AND sets session variables for RLS policies
   const { data, error } = await db.rpc('set_app_user', { p_username: u, p_password: p });
   btn.disabled = false; btn.textContent = 'Sign In →';
   if (error || !data) { document.getElementById('login-error').textContent = 'Incorrect username or password.'; return; }
   document.getElementById('login-error').textContent = '';
+  // Store credentials so session variables can be re-established on refresh
+  localStorage.setItem('raparts_creds', JSON.stringify({ u, p }));
   await completeLogin(data);
 }
 
@@ -1132,6 +1125,7 @@ async function completeLogin(data) {
 function doLogout() {
   currentUser = null; answers = {}; questions = []; selectedPhoto = null; selectedBiz = null;
   localStorage.removeItem('raparts_user');
+  localStorage.removeItem('raparts_creds');
   document.getElementById('login-user').value = '';
   document.getElementById('login-pass').value = '';
   showScreen('screen-login');
