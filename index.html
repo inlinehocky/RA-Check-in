@@ -483,7 +483,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;">
-          <input type="date" class="field-input" id="entry-revert-date" style="margin-bottom:0;flex:1;min-width:160px;" onchange="onEntryRevertDateChange()">
+          <input type="date" class="field-input" id="entry-revert-date" style="margin-bottom:0;flex:1;min-width:160px;">
           <button class="btn btn-danger" id="entry-revert-btn" style="white-space:nowrap;" disabled onclick="revertByEntryDate()">↩ Revert All on Date</button>
         </div>
         <div id="entry-revert-info" style="margin-top:10px;font-size:0.78rem;color:var(--text3);font-style:italic;min-height:18px;"></div>
@@ -512,6 +512,20 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </select>
           <button class="btn btn-danger" id="btn-revert-date" style="font-size:0.73rem;padding:5px 12px;display:none;" onclick="revertAllOnDate()">↩ Revert All on Date</button>
         </div>
+        <!-- Search + Sort -->
+        <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">
+          <input class="field-input" type="text" id="entries-search" placeholder="Search business, account, contact, notes…" style="flex:1;min-width:180px;margin-bottom:0;font-size:0.82rem;" oninput="applyFiltersAndRender()">
+          <select class="field-input" id="entries-sort" style="margin-bottom:0;font-size:0.82rem;width:auto;min-width:180px;" onchange="applyFiltersAndRender()">
+            <option value="recent">Most Recent Visit</option>
+            <option value="oldest">Oldest Visit First</option>
+            <option value="business">Business Name A–Z</option>
+            <option value="business_desc">Business Name Z–A</option>
+            <option value="account">Account # ↑</option>
+            <option value="zone">Zone A–Z</option>
+            <option value="employee">Employee A–Z</option>
+          </select>
+        </div>
+        <div id="entries-count" style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-top:6px;min-height:16px;"></div>
         <div id="all-entries-list"></div>
       </div>
     </div>
@@ -587,6 +601,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </label>
         <input type="file" id="biz-csv" accept=".csv,.txt" style="display:none;" onchange="importBusinessCSV(event)">
 
+        <input class="field-input" type="text" id="biz-dir-search" placeholder="Search by name or account #…" style="margin-bottom:12px;" oninput="filterBizDirectory()">
         <div id="biz-directory-list"></div>
       </div>
     </div>
@@ -683,15 +698,15 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div class="card">
         <div class="card-head">
           <div><div class="card-title">📍 Zones</div>
-            <div class="card-sub">Zone key is the first letter used to group reports (e.g. D = Dallas, F = Fort Worth).</div></div>
+            <div class="card-sub">Zones are pulled from your businesses. Add a friendly name to each zone key for use in reports.</div></div>
         </div>
         <div id="zones-list"></div>
         <div class="divider"></div>
-        <div class="section-label">Add Zone</div>
+        <div class="section-label">Add Friendly Name Manually</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <input class="field-input" type="text" id="new-zone-key" placeholder="Key (e.g. DAL)" style="width:100px;flex:none;margin-bottom:0;">
-          <input class="field-input" type="text" id="new-zone-name" placeholder="Zone name (e.g. Dallas)" style="flex:1;min-width:150px;margin-bottom:0;">
-          <button class="btn btn-primary" onclick="addZone()">Add Zone</button>
+          <input class="field-input" type="text" id="new-zone-key" placeholder="Zone key (e.g. DAL)" style="width:120px;flex:none;margin-bottom:0;">
+          <input class="field-input" type="text" id="new-zone-name" placeholder="Friendly name (e.g. Dallas)" style="flex:1;min-width:150px;margin-bottom:0;">
+          <button class="btn btn-primary" onclick="addZone()">Add</button>
         </div>
       </div>
     </div>
@@ -884,26 +899,47 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 
 <!-- EDIT ENTRY MODAL -->
 <div id="edit-entry-modal" style="display:none;position:fixed;inset:0;z-index:9986;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeEditEntryModal()">
-  <div style="width:100%;max-width:540px;background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto;animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
+  <div style="width:100%;max-width:580px;background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;box-shadow:0 8px 40px rgba(0,0,0,0.6);max-height:90vh;overflow-y:auto;animation:popIn 0.25s cubic-bezier(0.34,1.56,0.64,1);">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
       <div style="font-size:1rem;font-weight:800;">✏️ Edit Entry</div>
       <button onclick="closeEditEntryModal()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;">✕</button>
     </div>
-    <div id="ee-meta" style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-bottom:18px;"></div>
+    <div id="ee-meta" style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-bottom:14px;"></div>
+
+    <div class="section-label" style="margin-bottom:8px;">Business Information</div>
     <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Business Name</div>
+        <input class="field-input" type="text" id="ee-business" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">Account #</div>
+        <input class="field-input" type="text" id="ee-account" style="margin-bottom:0;"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Business Type</div>
+        <select class="field-input" id="ee-biz-type" style="margin-bottom:0;">
+          <option value="">— Select —</option>
+          <option value="Mechanical">Mechanical</option>
+          <option value="Collision">Collision</option>
+        </select></div>
+      <div class="form-group"><div class="field-label">Zone</div>
+        <input class="field-input" type="text" id="ee-zone" style="margin-bottom:0;"></div>
+    </div>
+
+    <div class="section-label" style="margin-bottom:8px;margin-top:4px;">Visit Information</div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Entry Date</div>
+        <input class="field-input" type="date" id="ee-entry-date" style="margin-bottom:0;"></div>
+      <div class="form-group"><div class="field-label">Entry Time</div>
+        <input class="field-input" type="time" id="ee-entry-time" style="margin-bottom:0;"></div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-group"><div class="field-label">Employee</div>
+        <select class="field-input" id="ee-username" style="margin-bottom:0;"></select></div>
       <div class="form-group"><div class="field-label">Number of Bays</div>
         <select class="field-input" id="ee-bays" style="margin-bottom:0;">
           <option value="">— Select —</option>
           <option value="1-3">1 – 3 Bays</option>
           <option value="4-6">4 – 6 Bays</option>
           <option value="7+">7 or More Bays</option>
-        </select></div>
-      <div class="form-group"><div class="field-label">Dealer Purchases</div>
-        <select class="field-input" id="ee-dealer" style="margin-bottom:0;">
-          <option value="">— Select —</option>
-          <option value="Some of our dealers">Some of our dealers</option>
-          <option value="All of our dealers">All of our dealers</option>
-          <option value="Not sure">Not sure</option>
         </select></div>
     </div>
     <div class="form-row-2">
@@ -918,6 +954,13 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <option value="Other">Other</option>
         </select></div>
     </div>
+    <div class="form-group"><div class="field-label">Dealer Purchases</div>
+      <select class="field-input" id="ee-dealer" style="margin-bottom:0;">
+        <option value="">— Select —</option>
+        <option value="Some of our dealers">Some of our dealers</option>
+        <option value="All of our dealers">All of our dealers</option>
+        <option value="Not sure">Not sure</option>
+      </select></div>
     <div class="form-group"><div class="field-label">Notes</div>
       <textarea class="field-input" id="ee-notes" style="margin-bottom:0;min-height:70px;"></textarea></div>
     <div id="ee-qa-wrap" style="margin-bottom:14px;"></div>
@@ -1131,6 +1174,16 @@ function doLogout() {
   showScreen('screen-login');
 }
 
+// Re-establish Postgres session variables for RLS on demand
+async function ensureSession() {
+  const creds = localStorage.getItem('raparts_creds');
+  if (!creds) return;
+  try {
+    const { u, p } = JSON.parse(creds);
+    await db.rpc('set_app_user', { p_username: u, p_password: p });
+  } catch(e) { console.warn('ensureSession failed:', e); }
+}
+
 // ═══ NAV ═══
 function buildNav() {
   const nav = document.getElementById('nav-tabs'); nav.innerHTML = '';
@@ -1150,16 +1203,27 @@ async function showTab(id) {
   if (id === 'tab-entry') await resetEntryForm();
   if (id === 'tab-map') await renderMapPane();
   if (id === 'tab-all-entries') {
+    await ensureSession();
     document.getElementById('entry-revert-card').style.display = currentUser?.role === 'owner' ? '' : 'none';
     const approvalCard = document.getElementById('report-approval-card');
     if (approvalCard) approvalCard.style.display = currentUser?.role === 'owner' ? '' : 'none';
     if (currentUser?.role === 'owner') loadReportQueue();
+    // Attach revert date listener now that the tab is visible
+    const revertInput = document.getElementById('entry-revert-date');
+    if (revertInput && !revertInput._listenerAttached) {
+      revertInput.addEventListener('change', onEntryRevertDateChange);
+      revertInput.addEventListener('input', onEntryRevertDateChange);
+      revertInput._listenerAttached = true;
+    }
     await renderAllEntries();
   }
-  if (id === 'tab-businesses') await renderBusinessDirectory();
-  if (id === 'tab-users') await renderUsersTab();
-  if (id === 'tab-questions') await renderQEditor();
-  if (id === 'tab-zones') await renderZonesTab();
+  if (id === 'tab-businesses') { await ensureSession(); await renderBusinessDirectory(); }
+  if (id === 'tab-users') {
+    await ensureSession();
+    await renderUsersTab();
+  }
+  if (id === 'tab-questions') { await ensureSession(); await renderQEditor(); }
+  if (id === 'tab-zones') { await ensureSession(); await renderZonesTab(); }
   if (id === 'tab-settings') await renderSettingsTab();
   if (id === 'tab-help') {
     const ownerSection = document.getElementById('help-owner-section');
@@ -1175,14 +1239,38 @@ async function loadZones() {
 async function renderZonesTab() {
   await loadZones();
   const c = document.getElementById('zones-list'); c.innerHTML = '';
-  if (!allZones.length) { c.innerHTML = '<div class="empty-state">No zones yet.</div>'; return; }
-  allZones.forEach(z => {
+
+  // Pull distinct zone values from businesses table
+  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null);
+  const distinctZones = [...new Set((bizZoneData||[]).map(b=>b.zone).filter(Boolean))].sort();
+
+  if (!distinctZones.length) { c.innerHTML = '<div class="empty-state">No zones found on businesses yet.</div>'; return; }
+
+  // Count businesses per zone value
+  const { data: allBizZones } = await db.from('businesses').select('zone').not('zone','is',null);
+  const countMap = {};
+  (allBizZones||[]).forEach(b => { countMap[b.zone] = (countMap[b.zone]||0) + 1; });
+
+  distinctZones.forEach(zv => {
+    const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+    const friendlyName = zObj ? zObj.zone_name : '';
     const row = document.createElement('div'); row.className = 'biz-row';
-    row.innerHTML = `<span class="biz-acct" style="min-width:40px;text-align:center;">${z.zone_key}</span>
-      <div style="flex:1;font-weight:700;font-size:0.88rem;">${z.zone_name}</div>
-      <button class="btn btn-danger" onclick="deleteZone('${z.id}')">✕</button>`;
+    row.innerHTML = `
+      <span class="biz-acct" style="min-width:60px;text-align:center;">${zv}</span>
+      <div style="flex:1;font-weight:700;font-size:0.88rem;">${friendlyName || '<span style="color:var(--text3);font-style:italic;font-weight:400;">No friendly name set</span>'}</div>
+      <span style="font-size:0.72rem;color:var(--text3);">${countMap[zv]||0} businesses</span>
+      <button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="setZoneName('${zv}','${friendlyName}')">✏️ Name</button>`;
     c.appendChild(row);
   });
+}
+
+async function setZoneName(zoneKey, current) {
+  const name = prompt(`Friendly name for zone "${zoneKey}":`, current||'');
+  if (name === null) return;
+  if (!name.trim()) { showToast('Enter a name'); return; }
+  // Upsert into zones table using prefix key (e.g. DAL for DAL, DAL01, DAL02)
+  await db.from('zones').upsert({ zone_key: zoneKey, zone_name: name.trim() }, { onConflict: 'zone_key' });
+  await loadZones(); await renderZonesTab(); showToast(`Zone name set to "${name.trim()}"`);
 }
 async function addZone() {
   const key = document.getElementById('new-zone-key').value.trim().toUpperCase();
@@ -1196,6 +1284,7 @@ async function addZone() {
 }
 async function deleteZone(id) {
   if (!confirm('Delete this zone?')) return;
+  await ensureSession();
   await db.from('zones').delete().eq('id', id);
   await loadZones(); await renderZonesTab(); showToast('Zone deleted');
 }
@@ -1703,7 +1792,9 @@ async function renderMapPane() {
 }
 
 // ═══ ALL ENTRIES ═══
+const _entryMap = {};
 function entryHTML(e) {
+  _entryMap[e.id] = e;
   const ans = e.answers || [];
   const yes = ans.filter(a => a.answer).length;
   const pct = ans.length ? Math.round(yes / ans.length * 100) : 0;
@@ -1721,6 +1812,7 @@ function entryHTML(e) {
       </div>
       <div class="entry-badges">
         ${e.account_number ? `<div class="badge-acct">#${e.account_number}</div>` : ''}
+        ${e.zone ? `<div class="badge-acct" style="background:var(--surface3);color:var(--text2);">📍 ${e.zone}</div>` : ''}
         ${e.business_type ? `<div class="badge-acct" style="background:${e.business_type==='Mechanical'?'var(--blue-dim)':'var(--red-dim)'};color:${e.business_type==='Mechanical'?'var(--blue)':'var(--red)'}">${e.business_type}</div>` : ''}
         <div class="badge-bays">🔧 ${e.bays} Bays</div>
         <div class="score-pill ${sc}">${yes}/${ans.length} YES</div>
@@ -1733,8 +1825,8 @@ function entryHTML(e) {
     <div class="entry-footer">
       ${e.photo_url ? `<img class="entry-photo-thumb" src="${e.photo_url}" onclick="openLightbox('${e.photo_url}')" alt="Visit photo">` : ''}
       ${mapsUrl ? `<a class="entry-gps-link" href="${mapsUrl}" target="_blank">📍 View Location (±${Math.round(e.location_accuracy||0)}m)</a>` : '<span style="font-size:0.72rem;color:var(--text3);">📍 No GPS data</span>'}
-      ${(e.gps_flag && currentUser?.role === 'owner') ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;margin-left:auto;" onclick="openGpsReviewModal(${JSON.stringify(e).replace(/"/g,'&quot;')})">🔍 Review GPS</button>` : ''}
-      ${currentUser?.role === 'owner' ? `<button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="openEditEntryModal(${JSON.stringify(e).replace(/"/g,'&quot;')})">✏️ Edit</button>` : ''}
+      ${(e.gps_flag && currentUser?.role === 'owner') ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;margin-left:auto;" onclick="openGpsReviewModal('${e.id}')">🔍 Review GPS</button>` : ''}
+      ${currentUser?.role === 'owner' ? `<button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="openEditEntryModal('${e.id}')">✏️ Edit</button>` : ''}
     </div>
   </div>`;
 }
@@ -1804,7 +1896,9 @@ async function dismissReport(reportId) {
 }
 
 async function renderAllEntries() {
-  const { data } = await db.from('entries').select('*').order('created_at', { ascending: false });
+  await ensureSession();
+  const { data, error } = await db.from('entries').select('*').order('created_at', { ascending: false });
+  if (error) { console.error('renderAllEntries error:', error); showToast('Error loading entries — check console', true); }
   allEntries = data || [];
 
   // Employee filter chips
@@ -1821,7 +1915,7 @@ async function renderAllEntries() {
   applyFiltersAndRender();
 }
 
-function applyFiltersAndRender() {
+async function applyFiltersAndRender() {
   let list = allFilter === 'all' ? allEntries : allEntries.filter(e => e.username === allFilter);
   if (sentFilter === 'unsent') list = list.filter(e => !e.used_in_report_at);
   else if (sentFilter === 'sent') list = list.filter(e => !!e.used_in_report_at);
@@ -1830,10 +1924,52 @@ function applyFiltersAndRender() {
     list = list.filter(e => e.used_in_report_at &&
       new Date(e.used_in_report_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) === sentDateFilter);
   }
-  document.getElementById('all-entries-list').innerHTML = list.length ? list.map(entryHTML).join('') : '<div class="empty-state">No entries found.</div>';
 
-  // Build report buttons
-  renderReportButtons(list);
+  // Search
+  const q = (document.getElementById('entries-search')?.value || '').toLowerCase().trim();
+  if (q) {
+    list = list.filter(e =>
+      (e.business || '').toLowerCase().includes(q) ||
+      (e.account_number || '').toString().includes(q) ||
+      (e.visit_contact_name || '').toLowerCase().includes(q) ||
+      (e.notes || '').toLowerCase().includes(q) ||
+      (e.zone || '').toLowerCase().includes(q) ||
+      (e.display_name || '').toLowerCase().includes(q)
+    );
+  }
+
+  // Sort
+  const sort = document.getElementById('entries-sort')?.value || 'recent';
+  const dateVal = e => {
+    const d = e.entry_date;
+    if (!d) return 0;
+    return new Date(d).getTime() || 0;
+  };
+  list = [...list].sort((a, b) => {
+    switch (sort) {
+      case 'oldest':      return dateVal(a) - dateVal(b);
+      case 'business':    return (a.business||'').localeCompare(b.business||'');
+      case 'business_desc': return (b.business||'').localeCompare(a.business||'');
+      case 'account':     return (a.account_number||'').toString().localeCompare((b.account_number||'').toString(), undefined, {numeric:true});
+      case 'zone':        return (a.zone||'').localeCompare(b.zone||'');
+      case 'employee':    return (a.display_name||'').localeCompare(b.display_name||'');
+      default:            return dateVal(b) - dateVal(a); // recent first
+    }
+  });
+
+  // Count label
+  const countEl = document.getElementById('entries-count');
+  if (countEl) {
+    const total = allEntries.length;
+    countEl.textContent = list.length === total
+      ? `${total} entries`
+      : `${list.length} of ${total} entries`;
+  }
+
+  document.getElementById('all-entries-list').innerHTML = list.length
+    ? list.map(entryHTML).join('')
+    : '<div class="empty-state">No entries found.</div>';
+  await renderReportButtons(list);
 }
 
 function setEmpFilter(v, el) {
@@ -1879,14 +2015,32 @@ async function revertAllOnDate() {
 }
 
 async function onEntryRevertDateChange() {
-  const dateVal = document.getElementById('entry-revert-date').value;
-  const btn = document.getElementById('entry-revert-btn');
-  const info = document.getElementById('entry-revert-info');
+  const dateInput = document.getElementById('entry-revert-date');
+  const btn       = document.getElementById('entry-revert-btn');
+  const info      = document.getElementById('entry-revert-info');
+  const dateVal   = dateInput.value;
+
   if (!dateVal) { btn.disabled = true; info.textContent = ''; return; }
-  // Count entries sent on this date
-  const { data, error } = await db.from('entries').select('id').not('used_in_report_at','is',null)
-    .gte('used_in_report_at', dateVal + 'T00:00:00.000Z')
-    .lt('used_in_report_at', dateVal + 'T23:59:59.999Z');
+
+  // Show loading state immediately so user knows it's working
+  info.textContent = 'Checking…';
+  info.style.color = 'var(--text3)';
+  btn.disabled = true;
+
+  await ensureSession();
+  const { start, end } = localDateRange(dateVal);
+  const { data, error } = await db.from('entries').select('id')
+    .not('used_in_report_at', 'is', null)
+    .gte('used_in_report_at', start)
+    .lte('used_in_report_at', end);
+
+  if (error) {
+    console.error('Revert date query error:', error);
+    info.textContent = 'Error querying entries — try again.';
+    info.style.color = 'var(--red)';
+    return;
+  }
+
   const count = data?.length || 0;
   if (count > 0) {
     btn.disabled = false;
@@ -1899,114 +2053,173 @@ async function onEntryRevertDateChange() {
   }
 }
 
+function resetRevertCard() {
+  const dateInput = document.getElementById('entry-revert-date');
+  const btn       = document.getElementById('entry-revert-btn');
+  const info      = document.getElementById('entry-revert-info');
+  if (dateInput) { dateInput.value = ''; dateInput.disabled = false; }
+  if (btn)       { btn.disabled = true; }
+  if (info)      { info.textContent = ''; info.style.color = 'var(--text3)'; }
+}
+
 async function revertByEntryDate() {
   const dateVal = document.getElementById('entry-revert-date').value;
   if (!dateVal) return;
-  const { data } = await db.from('entries').select('id').not('used_in_report_at','is',null)
-    .gte('used_in_report_at', dateVal + 'T00:00:00.000Z')
-    .lt('used_in_report_at', dateVal + 'T23:59:59.999Z');
+
+  await ensureSession();
+  const { start, end } = localDateRange(dateVal);
+  const { data, error: fetchErr } = await db.from('entries').select('id')
+    .not('used_in_report_at', 'is', null)
+    .gte('used_in_report_at', start)
+    .lte('used_in_report_at', end);
+
+  if (fetchErr) { showToast('Error fetching entries — try again', true); console.error(fetchErr); return; }
   const ids = (data || []).map(e => e.id);
   if (!ids.length) { showToast('No entries found for this date'); return; }
-  const friendly = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+  const friendly = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
   if (!confirm(`Revert all ${ids.length} sent visits from ${friendly} back to unsent?\n\nThey will be available for future reports.`)) return;
+
   const { error } = await db.from('entries').update({ used_in_report_at: null }).in('id', ids);
-  if (error) { showToast('Error reverting entries', true); return; }
-  showToast(`✓ ${ids.length} visits reverted to unsent`);
-  document.getElementById('entry-revert-date').value = '';
-  document.getElementById('entry-revert-btn').disabled = true;
-  document.getElementById('entry-revert-info').textContent = '';
+  if (error) { showToast('Error reverting entries', true); console.error(error); return; }
+
+  showToast(`\u2713 ${ids.length} visits reverted to unsent`);
+  resetRevertCard();
+  await renderAllEntries();
 }
 
+// Returns ISO strings covering the full local calendar day
+function localDateRange(dateVal) {
+  const start = new Date(dateVal + 'T00:00:00');
+  const end   = new Date(dateVal + 'T23:59:59.999');
+  return { start: start.toISOString(), end: end.toISOString() };
+}
 // ═══ REPORT BUTTONS ═══
 async function renderReportButtons(filteredList) {
   await loadReportSettings();
   const c = document.getElementById('report-buttons'); c.innerHTML = '';
   const types = ['Mechanical','Collision'];
-  const zones = allZones;
-  if (!zones.length) { c.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;">Add zones first to generate reports.</div>'; return; }
-  zones.forEach(z => {
+
+  // Pull distinct zones from businesses table
+  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null);
+  const distinctZones = [...new Set((bizZoneData||[]).map(b=>b.zone).filter(Boolean))].sort();
+
+  if (!distinctZones.length) {
+    c.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;">No zones found on businesses yet.</div>';
+    return;
+  }
+
+  // Group zone values by their zones-table prefix key
+  // e.g. DAL, DAL01, DAL02 all map to zone_key=DAL (zone_name=Dallas)
+  // If no prefix match, treat each value as its own group
+  const grouped = {}; // key: zone_key → { zone_name, zone_key, zoneValues[] }
+  distinctZones.forEach(zv => {
+    const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+    const key = zObj ? zObj.zone_key : zv;
+    const name = zObj ? zObj.zone_name : zv;
+    if (!grouped[key]) grouped[key] = { zone_key: key, zone_name: name, zoneValues: [] };
+    grouped[key].zoneValues.push(zv);
+  });
+
+  Object.values(grouped).sort((a,b)=>a.zone_name.localeCompare(b.zone_name)).forEach(group => {
     types.forEach(t => {
       const count = reportSettings[t] || (t==='Mechanical'?8:20);
-      // Count available unsent entries for this combo
-      const available = allEntries.filter(e => !e.used_in_report_at && e.zone && e.zone.toUpperCase().startsWith(z.zone_key.toUpperCase()) && e.business_type === t).length;
+      // Count unsent entries for all zone values in this group
+      const available = allEntries.filter(e =>
+        !e.used_in_report_at &&
+        e.business_type === t &&
+        e.zone && group.zoneValues.includes(e.zone)
+      ).length;
       const btn = document.createElement('div'); btn.className = 'report-btn';
       btn.innerHTML = `<div class="report-btn-type" style="color:${t==='Mechanical'?'var(--blue)':'var(--red)'}">${t}</div>
-        <div class="report-btn-zone">${z.zone_name}</div>
+        <div class="report-btn-zone">${group.zone_name}</div>
         <div class="report-btn-count">${available} unsent · needs ${count}</div>`;
-      btn.onclick = () => generateReport(t, z, count, available);
+      btn.onclick = () => generateReport(t, group, count, available);
       c.appendChild(btn);
     });
   });
 }
 
 async function loadReportSettings() {
-  const { data } = await db.from('report_settings').select('*');
+  const { data, error } = await db.from('report_settings').select('*');
   reportSettings = {};
-  (data||[]).forEach(r => reportSettings[r.report_type] = r.visit_count);
+  if (error) { console.error('loadReportSettings error:', error); return; }
+  (data||[]).forEach(r => {
+    reportSettings[r.report_type] = r.visit_count;
+    console.log('Setting loaded:', r.report_type, '=', r.visit_count);
+  });
 }
 
 async function generateReport(type, zone, count, available) {
-  if (available < count) {
-    if (!confirm(`Only ${available} unsent ${type} entries for ${zone.zone_name} (need ${count}). Generate with what's available?`)) return;
+  // Re-read settings fresh from DB at report time
+  await loadReportSettings();
+  const freshCount = reportSettings[type] || (type === 'Mechanical' ? 8 : 20);
+  const useCount = available < freshCount ? available : freshCount;
+  if (available < freshCount) {
+    if (!confirm(`Only ${available} unsent ${type} entries for ${zone.zone_name} (need ${freshCount}). Generate with ${available}?`)) return;
   }
-  // Fetch random unsent entries for this type+zone
-  const { data: pool } = await db.from('entries').select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone)')
+
+  const { data: pool } = await db.from('entries')
+    .select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone)')
     .is('used_in_report_at', null)
     .eq('business_type', type)
-    .filter('zone', 'ilike', zone.zone_key + '%');
+    .in('zone', zone.zoneValues);
 
   if (!pool || !pool.length) { showToast('No unsent entries found for this report'); return; }
 
-  const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, count);
+  console.log('generateReport:', type, 'freshCount=', freshCount, 'pool=', pool.length, 'useCount=', useCount);
+  const shuffled = pool.sort(() => Math.random() - 0.5).slice(0, useCount);
   const now = new Date().toISOString();
   const ids = shuffled.map(e => e.id);
   await db.from('entries').update({ used_in_report_at: now }).in('id', ids);
 
-  // Build PDF HTML
+  // Build and open PDF immediately — this always works regardless of email setting
   const { html, filename } = buildReportPDF(shuffled, type, zone.zone_name, now);
-
-  // Convert HTML to PDF blob via print window, then also save to Supabase storage
   const printWin = window.open('', '_blank');
-  printWin.document.write(html);
-  printWin.document.close();
-  printWin.onload = () => { printWin.print(); printWin.onafterprint = () => printWin.close(); };
-
-  // Save HTML as a blob to Supabase Storage so Edge Function can attach it
-  const blob = new Blob([html], { type: 'text/html' });
-  const storagePath = `${zone.zone_key}/${filename.replace('.pdf','.html')}`;
-  const { error: uploadErr } = await db.storage.from('reports').upload(storagePath, blob, { upsert: true, contentType: 'text/html' });
-  if (uploadErr) {
-    console.error('Storage upload error:', uploadErr);
-    showToast('Report generated but could not save for email — check console', true);
+  if (printWin) {
+    printWin.document.write(html);
+    printWin.document.close();
+    printWin.onload = () => { printWin.print(); printWin.onafterprint = () => printWin.close(); };
   } else {
-    // Insert into report_queue
-    const { data: qRow } = await db.from('report_queue').insert({
-      report_type:  type,
-      zone_key:     zone.zone_key,
-      zone_name:    zone.zone_name,
-      entry_count:  shuffled.length,
-      filename,
-      storage_path: storagePath,
-      status:       'generated',
-      created_by:   currentUser.username,
-    }).select().single();
-
-    if (qRow) {
-      // Call Edge Function to email owner for approval
-      const EDGE_URL = `${SUPA_URL}/functions/v1/send-report`;
-      fetch(EDGE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPA_KEY}` },
-        body: JSON.stringify({ action: 'send_to_owner', report_id: qRow.id }),
-      }).then(r => r.json()).then(r => {
-        if (r.ok) showToast('📧 Report emailed to you for approval');
-        else showToast('Report generated — email failed: ' + r.error, true);
-      }).catch(e => showToast('Report generated — email error: ' + e.message, true));
-    }
+    showToast('Pop-up blocked — allow pop-ups to view the PDF', true);
   }
 
-  showToast(`Report generated — ${shuffled.length} entries marked as sent`);
+  showToast(`✓ Report generated — ${shuffled.length} entries marked as sent`);
   await renderAllEntries();
+
+  // Check auto-email setting — do this after PDF opens so it never blocks the report
+  const { data: emailSetting } = await db.from('report_settings')
+    .select('visit_count').eq('report_type', 'auto_email').single();
+  const autoEmail = emailSetting?.visit_count === 1;
+  if (!autoEmail) return;
+
+  // Save to storage and queue for email
+  const blob = new Blob([html], { type: 'text/html' });
+  const storagePath = `${zone.zone_key}/${filename.replace('.pdf', '.html')}`;
+  const { error: uploadErr } = await db.storage.from('reports').upload(storagePath, blob, { upsert: true, contentType: 'text/html' });
+  if (uploadErr) { console.error('Storage upload error:', uploadErr); return; }
+
+  const { data: qRow } = await db.from('report_queue').insert({
+    report_type:  type,
+    zone_key:     zone.zone_key,
+    zone_name:    zone.zone_name,
+    entry_count:  shuffled.length,
+    filename,
+    storage_path: storagePath,
+    status:       'generated',
+    created_by:   currentUser.username,
+  }).select().single();
+
+  if (qRow) {
+    fetch(`${SUPA_URL}/functions/v1/send-report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPA_KEY}` },
+      body: JSON.stringify({ action: 'send_to_owner', report_id: qRow.id }),
+    }).then(r => r.json()).then(r => {
+      if (r.ok) showToast('📧 Report emailed to you for approval');
+      else console.error('Email failed:', r.error);
+    }).catch(e => console.error('Email error:', e.message));
+  }
 }
 
 // ═══ PDF REPORT GENERATOR ═══
@@ -2333,6 +2546,7 @@ function clearBizForm() {
   document.getElementById('biz-type').value='';
 }
 async function saveBusiness() {
+  await ensureSession();
   const acct = document.getElementById('biz-acct').value.trim();
   const name = document.getElementById('biz-name').value.trim();
   if (!acct || !name) { showToast('Account number and name required'); return; }
@@ -2362,7 +2576,13 @@ async function saveBusiness() {
   };
   const { error } = await db.from('businesses').upsert(payload, {onConflict:'account_number'});
   if (error) { showToast('Error saving business'); console.error(error); return; }
-  toggleAddBizForm(); await renderBusinessDirectory(); showToast('Business saved');}
+  // Hide form and reset state before re-rendering
+  document.getElementById('add-biz-form').style.display = 'none';
+  editingBizAcct = null;
+  clearBizForm();
+  await renderBusinessDirectory();
+  showToast('Business saved');
+}
 
 function parseCSV(text) {
   text = text.replace(/^\uFEFF/, '').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
@@ -2450,12 +2670,26 @@ function resetUploadZoneBiz() {
 }
 
 async function renderBusinessDirectory() {
+  await ensureSession();
   await loadZones(); await populateZoneDropdown('biz-zone');
   const { data } = await db.from('businesses').select('*').order('business_name');
   allBusinesses = data || [];
+  filterBizDirectory();
+}
+
+function filterBizDirectory() {
+  const q = (document.getElementById('biz-dir-search')?.value || '').toLowerCase().trim();
   const c = document.getElementById('biz-directory-list'); c.innerHTML = '';
-  if (!allBusinesses.length) { c.innerHTML = '<div class="empty-state">No businesses yet.</div>'; return; }
-  allBusinesses.forEach(b => {
+  const filtered = q
+    ? allBusinesses.filter(b =>
+        b.business_name?.toLowerCase().includes(q) ||
+        String(b.account_number).includes(q))
+    : allBusinesses;
+  if (!filtered.length) {
+    c.innerHTML = `<div class="empty-state">${q ? 'No businesses match your search.' : 'No businesses yet.'}</div>`;
+    return;
+  }
+  filtered.forEach(b => {
     const row = document.createElement('div'); row.className = 'biz-row';
     const zoneName = allZones.find(z=>z.zone_key===b.zone)?.zone_name || b.zone || '';
     row.innerHTML = `<div style="flex:1;min-width:180px;">
@@ -2510,7 +2744,7 @@ async function renderUsersTab() {
     row.innerHTML = `<div class="user-name-badge">${u.display_name||u.username}</div>
       <span style="font-size:0.75rem;color:var(--text3);">@${u.username}</span>
       <div class="user-role-badge ${u.role==='owner'?'role-owner':'role-employee'}">${u.role}</div>
-      <span style="font-size:0.72rem;color:var(--text3);flex:1;font-style:italic;">${count||0} assigned</span>
+      <span id="emp-count-${u.username}" style="font-size:0.72rem;color:var(--text3);flex:1;font-style:italic;">${count||0} assigned</span>
       ${u.role!=='owner'?`<button class="btn btn-danger" onclick="removeEmployee('${u.username}')">Remove</button>`:''}`;
     ul.appendChild(row);
   }
@@ -2542,6 +2776,7 @@ async function renderEmpZoneList() {
   emps.forEach(u => {
     const empZones = assignedMap[u.username] || new Set();
     const div = document.createElement('div');
+    div.className = 'emp-zone-row';
     div.style.cssText = 'padding:12px 0;border-bottom:1px solid var(--border);';
     const zonePills = allBizZones.map(z => {
       const active = empZones.has(z);
@@ -2552,7 +2787,9 @@ async function renderEmpZoneList() {
     div.innerHTML = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
       <div style="font-weight:700;font-size:0.85rem;">${u.display_name||u.username}</div>
       <span style="font-size:0.72rem;color:var(--text3);">@${u.username}</span>
-      ${empZones.size ? `<span style="font-size:0.68rem;color:var(--teal);font-weight:700;">${empZones.size} zone${empZones.size>1?'s':''} assigned</span>` : '<span style="font-size:0.68rem;color:var(--text3);font-style:italic;">no zones assigned</span>'}
+      ${empZones.size
+        ? `<span class="zone-count-badge" style="font-size:0.68rem;color:var(--teal);font-weight:700;">${empZones.size} zone${empZones.size>1?'s':''} assigned</span>`
+        : `<span class="zone-count-badge" style="font-size:0.68rem;color:var(--text3);font-style:italic;">no zones assigned</span>`}
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;">${zonePills}</div>`;
     c.appendChild(div);
@@ -2562,14 +2799,31 @@ async function renderEmpZoneList() {
 async function toggleEmpZone(username, zoneKey, btn) {
   const active = btn.classList.contains('active');
   if (active) {
-    await db.from('user_zones').delete().eq('username', username).eq('zone_key', zoneKey);
+    const { error } = await db.from('user_zones').delete().eq('username', username).eq('zone_key', zoneKey);
+    if (error) { showToast('Error removing zone assignment', true); console.error(error); return; }
     btn.classList.remove('active');
   } else {
-    await db.from('user_zones').upsert({ username, zone_key: zoneKey }, { onConflict: 'username,zone_key' });
+    const { error } = await db.from('user_zones').upsert({ username, zone_key: zoneKey }, { onConflict: 'username,zone_key' });
+    if (error) { showToast('Error assigning zone', true); console.error(error); return; }
     btn.classList.add('active');
   }
-  // Refresh counts
-  await renderEmpZoneList();
+  // Update the count badge for this employee without re-rendering the whole list
+  const row = btn.closest('.emp-zone-row');
+  if (row) {
+    const activeCount = row.querySelectorAll('.filter-chip.active').length;
+    const badge = row.querySelector('.zone-count-badge');
+    if (badge) {
+      if (activeCount > 0) {
+        badge.textContent = `${activeCount} zone${activeCount > 1 ? 's' : ''} assigned`;
+        badge.style.color = 'var(--teal)';
+        badge.style.fontStyle = 'normal';
+      } else {
+        badge.textContent = 'no zones assigned';
+        badge.style.color = 'var(--text3)';
+        badge.style.fontStyle = 'italic';
+      }
+    }
+  }
 }
 
 async function renderAssignPills() {
@@ -2588,11 +2842,13 @@ async function renderAssignPills() {
 }
 
 async function renderBizAssignList() {
-  if(!assignTarget) return;
-  const { data: assigned } = await db.from('business_assignments').select('account_number').eq('username',assignTarget);
-  assignedAccounts = new Set((assigned||[]).map(a=>a.account_number));
-  const { data: all } = await db.from('businesses').select('*').order('business_name');
-  allBusinesses = all||[];
+  if (!assignTarget) return;
+  const { data: assigned, error: aErr } = await db.from('business_assignments').select('account_number').eq('username', assignTarget);
+  if (aErr) console.error('business_assignments fetch error:', aErr);
+  assignedAccounts = new Set((assigned || []).map(a => a.account_number));
+  const { data: all, error: bErr } = await db.from('businesses').select('*').order('business_name');
+  if (bErr) console.error('businesses fetch error:', bErr);
+  allBusinesses = all || [];
   // Populate zone dropdown from distinct zone values on businesses
   const zSel = document.getElementById('assign-zone-filter');
   const curZone = zSel.value;
@@ -2601,7 +2857,6 @@ async function renderBizAssignList() {
   distinctZones.forEach(zv => {
     const o = document.createElement('option');
     o.value = zv;
-    // Try to find a friendly name from zones table where key is a prefix of this value
     const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
     o.textContent = zObj ? `${zv} — ${zObj.zone_name}` : zv;
     zSel.appendChild(o);
@@ -2618,10 +2873,19 @@ function renderBizAssignListUI() {
   if (search) filtered = filtered.filter(b => b.business_name.toLowerCase().includes(search) || b.account_number.toLowerCase().includes(search));
   if(!filtered.length) { c.innerHTML='<div style="font-size:0.8rem;color:var(--text3);font-style:italic;padding:8px 0;">No businesses found.</div>'; return; }
   const assignedInView = filtered.filter(b => assignedAccounts.has(b.account_number)).length;
-  const summary = document.createElement('div');
-  summary.style.cssText = 'font-size:0.72rem;color:var(--text3);padding:6px 2px 10px;font-style:italic;';
-  summary.textContent = `${assignedInView} of ${filtered.length} assigned`;
-  c.appendChild(summary);
+  const totalAssigned = assignedAccounts.size;
+  let summary = document.getElementById('biz-assign-summary');
+  if (!summary) {
+    summary = document.createElement('div');
+    summary.id = 'biz-assign-summary';
+    summary.style.cssText = 'font-size:0.72rem;color:var(--text3);padding:6px 2px 10px;font-style:italic;';
+    c.appendChild(summary);
+  } else {
+    c.appendChild(summary);
+  }
+  summary.textContent = zoneFilter
+    ? `${assignedInView} of ${filtered.length} shown assigned · ${totalAssigned} total assigned`
+    : `${totalAssigned} of ${filtered.length} assigned`;
   filtered.forEach(b => {
     const checked = assignedAccounts.has(b.account_number);
     const zoneName = allZones.find(z=>z.zone_key===b.zone)?.zone_name||b.zone||'';
@@ -2665,11 +2929,27 @@ async function selectAllInZone(assign) {
     }
     showToast(`Removed all ${ids.length} assigned businesses`);
   }
+  updateEmpAssignedCount();
   renderBizAssignListUI();
 }
+function updateEmpAssignedCount() {
+  if (!assignTarget) return;
+  const span = document.getElementById(`emp-count-${assignTarget}`);
+  if (span) span.textContent = `${assignedAccounts.size} assigned`;
+}
+
 async function toggleAssignment(acct, assign) {
-  if(assign) { await db.from('business_assignments').upsert({username:assignTarget,account_number:acct},{onConflict:'username,account_number'}); assignedAccounts.add(acct); }
-  else { await db.from('business_assignments').delete().eq('username',assignTarget).eq('account_number',acct); assignedAccounts.delete(acct); }
+  if (assign) {
+    const { error } = await db.from('business_assignments').upsert({ username: assignTarget, account_number: acct }, { onConflict: 'username,account_number' });
+    if (error) { showToast('Error assigning business — check console', true); console.error('assign error:', error); return; }
+    assignedAccounts.add(acct);
+  } else {
+    const { error } = await db.from('business_assignments').delete().eq('username', assignTarget).eq('account_number', acct);
+    if (error) { showToast('Error removing assignment — check console', true); console.error('unassign error:', error); return; }
+    assignedAccounts.delete(acct);
+  }
+  updateEmpAssignedCount();
+  renderBizAssignListUI();
 }
 async function addEmployee() {
   const u=document.getElementById('new-emp-user').value.trim();
@@ -2755,6 +3035,24 @@ async function removeQuestion(id) {
 async function renderSettingsTab() {
   await loadReportSettings();
   const c=document.getElementById('settings-list'); c.innerHTML='';
+
+  // Auto-email toggle
+  const { data: emailSetting } = await db.from('report_settings')
+    .select('visit_count').eq('report_type', 'auto_email').single();
+  const autoEmail = emailSetting?.visit_count === 1;
+  const emailDiv = document.createElement('div');
+  emailDiv.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);';
+  emailDiv.innerHTML = `<div style="flex:1;">
+      <div style="font-weight:700;font-size:0.88rem;">📧 Auto-Send Report Emails</div>
+      <div style="font-size:0.72rem;color:var(--text3);">When enabled, generating a report emails it to you for approval and queues client distribution.</div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+      <input type="checkbox" id="setting-auto-email" ${autoEmail ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--teal);" onchange="saveAutoEmailSetting(this.checked)">
+      <span style="font-size:0.82rem;font-weight:600;">${autoEmail ? 'On' : 'Off'}</span>
+    </label>`;
+  c.appendChild(emailDiv);
+
+  // Report visit counts
   ['Mechanical','Collision'].forEach(type=>{
     const cur=reportSettings[type]||(type==='Mechanical'?8:20);
     const div=document.createElement('div'); div.style.cssText='display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);';
@@ -2766,16 +3064,35 @@ async function renderSettingsTab() {
       <button class="btn btn-primary" onclick="saveSetting('${type}')">Save</button>`;
     c.appendChild(div);
   });
+
   // Password change
   const sel=document.getElementById('pw-change-user'); sel.innerHTML='';
   const { data: users }=await db.from('users').select('username,display_name').order('role');
   (users||[]).forEach(u=>{ const o=document.createElement('option'); o.value=u.username; o.textContent=`${u.display_name||u.username} (@${u.username})`; sel.appendChild(o); });
 }
+
+async function saveAutoEmailSetting(enabled) {
+  await db.from('report_settings').upsert(
+    { report_type: 'auto_email', visit_count: enabled ? 1 : 0 },
+    { onConflict: 'report_type' }
+  );
+  const label = document.querySelector('#setting-auto-email + span');
+  if (label) label.textContent = enabled ? 'On' : 'Off';
+  showToast(`Auto-send emails ${enabled ? 'enabled' : 'disabled'}`);
+}
 async function saveSetting(type) {
-  const val=parseInt(document.getElementById(`setting-${type}`).value);
-  if(!val||val<1) { showToast('Enter a valid number'); return; }
-  await db.from('report_settings').upsert({report_type:type,visit_count:val},{onConflict:'report_type'});
-  await loadReportSettings(); showToast(`${type} report count updated to ${val}`);
+  const val = parseInt(document.getElementById(`setting-${type}`).value);
+  if (!val || val < 1) { showToast('Enter a valid number'); return; }
+  const { error } = await db.from('report_settings')
+    .upsert({ report_type: type, visit_count: val }, { onConflict: 'report_type' });
+  if (error) {
+    console.error('saveSetting error:', error);
+    showToast(`Error saving setting: ${error.message}`, true);
+    return;
+  }
+  await loadReportSettings();
+  console.log('After save, reportSettings:', reportSettings);
+  showToast(`${type} report count updated to ${val}`);
 }
 async function changePassword() {
   const username=document.getElementById('pw-change-user').value;
@@ -2792,32 +3109,92 @@ async function changePassword() {
 // ═══ EDIT ENTRY MODAL ═══
 let _editEntry = null;
 
-function openEditEntryModal(entry) {
+async function openEditEntryModal(entryId) {
+  const entry = _entryMap[entryId];
+  if (!entry) { showToast('Entry not found — refresh and try again', true); return; }
   _editEntry = entry;
-  document.getElementById('ee-meta').textContent = `${entry.business} · ${entry.entry_date} at ${entry.entry_time} · by ${entry.display_name}`;
-  document.getElementById('ee-bays').value = entry.bays || '';
-  document.getElementById('ee-dealer').value = entry.purchase_from_dealer || '';
-  document.getElementById('ee-contact-name').value = entry.visit_contact_name || '';
-  document.getElementById('ee-contact-pos').value = entry.visit_contact_position || '';
-  document.getElementById('ee-notes').value = entry.notes || '';
-  // Q&A toggles
-  const qaWrap = document.getElementById('ee-qa-wrap');
-  const ans = entry.answers || [];
-  if (ans.length) {
-    qaWrap.innerHTML = `<div class="section-label" style="margin-bottom:8px;">Check-In Questions</div>` +
-      ans.map((a, i) => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
-            <input type="checkbox" id="ee-q-${i}" ${a.answer?'checked':''} style="width:16px;height:16px;accent-color:var(--teal);">
-            <span style="font-size:0.82rem;">${a.question}</span>
-          </label>
-        </div>`).join('');
-    qaWrap.style.display = 'block';
-  } else {
-    qaWrap.style.display = 'none';
-  }
+
+  // Show modal FIRST so all elements are visible when we set values
   document.getElementById('edit-entry-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
+
+  // Use requestAnimationFrame to ensure the modal is rendered before populating
+  requestAnimationFrame(() => {
+    document.getElementById('ee-meta').textContent = `Entry #${entry.id} · created ${new Date(entry.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+
+    // Business info
+    document.getElementById('ee-business').value = entry.business || '';
+    document.getElementById('ee-account').value = entry.account_number || '';
+    document.getElementById('ee-biz-type').value = entry.business_type || '';
+    document.getElementById('ee-zone').value = entry.zone || '';
+
+    // Dates
+    const rawDate = entry.entry_date || '';
+    let isoDate = '';
+    if (rawDate) { const d = new Date(rawDate); if (!isNaN(d)) isoDate = d.toLocaleDateString('en-CA'); }
+    document.getElementById('ee-entry-date').value = isoDate;
+
+    const rawTime = entry.entry_time || '';
+    let isoTime = '';
+    if (rawTime) {
+      const t = new Date(`1970-01-01 ${rawTime}`);
+      if (!isNaN(t)) isoTime = t.toTimeString().slice(0,5);
+      else isoTime = rawTime.slice(0,5);
+    }
+    document.getElementById('ee-entry-time').value = isoTime;
+
+    // Selects — now visible so .value works reliably
+    const setSelectByValue = (id, val) => {
+      const el = document.getElementById(id);
+      el.value = val || '';
+      if (val && el.value !== val) {
+        for (const o of el.options) { if (o.value === val) { o.selected = true; break; } }
+      }
+    };
+    setSelectByValue('ee-bays', entry.bays);
+    setSelectByValue('ee-dealer', entry.purchase_from_dealer);
+    setSelectByValue('ee-contact-pos', entry.visit_contact_position);
+
+    document.getElementById('ee-contact-name').value = entry.visit_contact_name || '';
+    document.getElementById('ee-notes').value = entry.notes || '';
+
+    // Q&A toggles
+    const qaWrap = document.getElementById('ee-qa-wrap');
+    const ans = entry.answers || [];
+    if (ans.length) {
+      qaWrap.innerHTML = `<div class="section-label" style="margin-bottom:8px;">Check-In Questions</div>` +
+        ans.map((a, i) => `
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;">
+              <input type="checkbox" id="ee-q-${i}" ${a.answer?'checked':''} style="width:16px;height:16px;accent-color:var(--teal);">
+              <span style="font-size:0.82rem;">${a.question}</span>
+            </label>
+          </div>`).join('');
+      qaWrap.style.display = 'block';
+    } else {
+      qaWrap.style.display = 'none';
+    }
+  });
+
+  // Populate employee dropdown async (separate from rAF since it's a DB call)
+  const empSel = document.getElementById('ee-username');
+  empSel.innerHTML = '<option value="">— Loading… —</option>';
+  const { data: users } = await db.from('users').select('username, display_name').order('display_name');
+  empSel.innerHTML = '<option value="">— Select Employee —</option>';
+  (users || []).forEach(u => {
+    const o = document.createElement('option');
+    o.value = u.username;
+    o.textContent = `${u.display_name || u.username} (@${u.username})`;
+    o.selected = u.username === entry.username;
+    empSel.appendChild(o);
+  });
+  if (entry.username && empSel.value !== entry.username) {
+    const o = document.createElement('option');
+    o.value = entry.username;
+    o.textContent = `${entry.display_name || entry.username} (@${entry.username})`;
+    o.selected = true;
+    empSel.appendChild(o);
+  }
 }
 
 function closeEditEntryModal() {
@@ -2828,20 +3205,59 @@ function closeEditEntryModal() {
 
 async function saveEditEntry() {
   if (!_editEntry) return;
-  const ans = (_editEntry.answers || []).map((a, i) => ({
-    question: a.question,
-    answer: document.getElementById(`ee-q-${i}`)?.checked ?? a.answer
-  }));
+  await ensureSession();
+
+  const ans = (_editEntry.answers || []).map((a, i) => {
+    const cb = document.getElementById(`ee-q-${i}`);
+    return { question: a.question, answer: cb ? cb.checked : Boolean(a.answer) };
+  });
+
+  // Date — input gives YYYY-MM-DD, store as-is or convert to display format
+  const rawDate = document.getElementById('ee-entry-date').value;
+  const entryDate = rawDate || _editEntry.entry_date || null;
+
+  // Time — input gives HH:MM (24h), convert to 12-hour display
+  const rawTime = document.getElementById('ee-entry-time').value;
+  let entryTime = _editEntry.entry_time || null;
+  if (rawTime) {
+    try {
+      const t = new Date(`1970-01-01T${rawTime}:00`);
+      entryTime = t.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    } catch(e) { entryTime = rawTime; }
+  }
+
+  // Employee — get username and display_name from selected option
+  const empSel = document.getElementById('ee-username');
+  const selectedUsername = empSel?.value || _editEntry.username;
+  const selectedOption = empSel?.options[empSel.selectedIndex];
+  // Option text is "First Last (@username)" — extract display name before " (@"
+  const selectedDisplayName = selectedOption
+    ? selectedOption.textContent.replace(/\s*\(@[^)]+\)$/, '').trim()
+    : _editEntry.display_name;
+
   const payload = {
-    bays: document.getElementById('ee-bays').value || null,
-    purchase_from_dealer: document.getElementById('ee-dealer').value || null,
-    visit_contact_name: document.getElementById('ee-contact-name').value.trim() || null,
+    business:               document.getElementById('ee-business').value.trim() || null,
+    business_type:          document.getElementById('ee-biz-type').value || null,
+    zone:                   document.getElementById('ee-zone').value.trim() || null,
+    entry_date:             entryDate,
+    entry_time:             entryTime,
+    username:               selectedUsername,
+    display_name:           selectedDisplayName,
+    bays:                   document.getElementById('ee-bays').value || null,
+    purchase_from_dealer:   document.getElementById('ee-dealer').value || null,
+    visit_contact_name:     toProperCase(document.getElementById('ee-contact-name').value.trim()) || null,
     visit_contact_position: document.getElementById('ee-contact-pos').value || null,
-    notes: document.getElementById('ee-notes').value.trim() || null,
-    answers: ans,
+    notes:                  document.getElementById('ee-notes').value.trim() || null,
+    answers:                ans,
   };
+
+  console.log('Saving entry payload:', payload);
   const { error } = await db.from('entries').update(payload).eq('id', _editEntry.id);
-  if (error) { showToast('Error saving entry', true); console.error(error); return; }
+  if (error) {
+    showToast('Error saving entry — check console', true);
+    console.error('saveEditEntry error:', error);
+    return;
+  }
   showToast('Entry updated ✓');
   closeEditEntryModal();
   await renderAllEntries();
@@ -2850,7 +3266,9 @@ async function saveEditEntry() {
 // ═══ GPS REVIEW MODAL ═══
 let _grEntry = null;
 
-async function openGpsReviewModal(entry) {
+async function openGpsReviewModal(entryId) {
+  const entry = _entryMap[entryId] || _entryMap[entryId];
+  if (!entry) { showToast('Entry not found — refresh and try again', true); return; }
   _grEntry = entry;
   // Fetch current business record for latest coords
   const { data: biz } = await db.from('businesses').select('business_name,latitude,longitude,account_number').eq('account_number', entry.account_number).single();
