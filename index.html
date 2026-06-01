@@ -1205,10 +1205,13 @@ function buildNav() {
   });
 }
 async function showTab(id) {
+  const prevTab = window._activeTab || null;
+  window._activeTab = id;
   document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === id));
   const pane = document.getElementById(id); if (pane) pane.classList.add('active');
-  if (id === 'tab-entry') await resetEntryForm();
+  // Only reset the entry form when NOT coming from the map tab (preserve form state between entry↔map)
+  if (id === 'tab-entry' && prevTab !== 'tab-map') await resetEntryForm();
   if (id === 'tab-map') await renderMapPane();
   if (id === 'tab-all-entries') {
     await ensureSession();
@@ -1479,12 +1482,49 @@ async function saveNewBizFromEntry() {
 
 // ═══ ZONE MAP URL HELPER ═══
 async function getZoneMapUrl() {
-  // Get employee's assigned zones from user_zones table
-  const { data: empZones } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username).limit(1);
-  if (!empZones || !empZones.length) return null;
-  const zoneKey = empZones[0].zone_key;
-  const { data: mapRow } = await db.from('zone_map_links').select('url').eq('zone_key', zoneKey).single();
-  return mapRow?.url || null;
+  // Collect all candidate zone values for this employee
+  const candidateZones = new Set();
+
+  // 1. user_zones table
+  const { data: empZones } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username);
+  (empZones || []).forEach(r => candidateZones.add(r.zone_key));
+
+  // 2. Zones from assigned businesses
+  const { data: assignments } = await db.from('business_assignments')
+    .select('account_number').eq('username', currentUser.username);
+  if (assignments && assignments.length) {
+    const accts = assignments.map(a => a.account_number);
+    const { data: bizList } = await db.from('businesses')
+      .select('zone').in('account_number', accts).not('zone', 'is', null);
+    (bizList || []).forEach(b => { if (b.zone) candidateZones.add(b.zone); });
+  }
+
+  console.log('[getZoneMapUrl] candidate zones:', [...candidateZones]);
+
+  if (!candidateZones.size) { console.log('[getZoneMapUrl] no zones found for employee'); return null; }
+
+  // Load all map links
+  const { data: links } = await db.from('zone_map_links').select('zone_key, url');
+  console.log('[getZoneMapUrl] zone_map_links:', links);
+  if (!links || !links.length) { console.log('[getZoneMapUrl] no zone_map_links rows'); return null; }
+
+  // For each candidate zone, try exact match then prefix match against map links
+  for (const zone of candidateZones) {
+    const exact = links.find(l => l.zone_key === zone);
+    if (exact?.url) { console.log('[getZoneMapUrl] exact match:', exact); return exact.url; }
+  }
+  for (const zone of candidateZones) {
+    const prefix = links.find(l => zone.toUpperCase().startsWith(l.zone_key.toUpperCase()));
+    if (prefix?.url) { console.log('[getZoneMapUrl] prefix match:', prefix, 'for zone:', zone); return prefix.url; }
+  }
+  // Reverse prefix: zone_key starts with the candidate (e.g. candidate=DAL, key=DAL01)
+  for (const zone of candidateZones) {
+    const rev = links.find(l => l.zone_key.toUpperCase().startsWith(zone.toUpperCase()));
+    if (rev?.url) { console.log('[getZoneMapUrl] reverse prefix match:', rev, 'for zone:', zone); return rev.url; }
+  }
+
+  console.log('[getZoneMapUrl] no matching map link found');
+  return null;
 }
 
 async function resetEntryForm() {
