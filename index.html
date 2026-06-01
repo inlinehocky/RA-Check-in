@@ -379,7 +379,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <div class="biz-info-row"><strong>📞 Phone</strong><span id="biz-info-phone"></span></div>
           <div class="biz-info-row" id="biz-info-contact-row"><strong>👤 Contact</strong><span id="biz-info-contact"></span></div>
           <div style="margin-top:10px;">
-            <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;" id="last-visit-btn" onclick="openLastVisitModal()" style="display:none;">🕐 View Last Visit</button>
+            <button class="btn btn-outline" style="font-size:0.78rem;padding:7px 16px;border-color:var(--gold-border);color:var(--gold);gap:6px;display:none;" id="last-visit-btn" onclick="openLastVisitModal()">🕐 Last Visit Responses</button>
             <span id="last-visit-none" style="font-size:0.72rem;color:var(--text3);font-style:italic;display:none;">No previous visits recorded.</span>
           </div>
         </div>
@@ -865,6 +865,12 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <button onclick="closeLastVisitModal()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;line-height:1;">✕</button>
     </div>
 
+    <!-- Q&A — shown first since that's the primary interest -->
+    <div id="lv-qa-wrap" style="margin-bottom:16px;">
+      <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Check-In Question Responses</div>
+      <div id="lv-qa-list"></div>
+    </div>
+
     <!-- Photo -->
     <div id="lv-photo-wrap" style="display:none;margin-bottom:16px;">
       <img id="lv-photo" src="" alt="Visit photo" style="width:100%;max-height:200px;object-fit:cover;border-radius:10px;border:1px solid var(--border);">
@@ -889,12 +895,6 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px;">Visited By</div>
         <div id="lv-employee" style="font-size:0.85rem;font-weight:600;"></div>
       </div>
-    </div>
-
-    <!-- Q&A -->
-    <div id="lv-qa-wrap" style="margin-bottom:16px;">
-      <div style="font-size:0.65rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;">Check-In Questions</div>
-      <div id="lv-qa-list"></div>
     </div>
 
     <!-- Notes -->
@@ -1560,7 +1560,7 @@ async function onBizChange() {
   answers = {};
   await loadQuestions(biz.business_type);
   renderQuestions();
-  // Fetch last visit for this business
+  // Fetch last visit for this business (any employee)
   const lvBtn = document.getElementById('last-visit-btn');
   const lvNone = document.getElementById('last-visit-none');
   lvBtn.style.display = 'none'; lvNone.style.display = 'none';
@@ -1570,7 +1570,8 @@ async function onBizChange() {
   if (lastVisit) {
     window._lastVisitData = lastVisit;
     lvBtn.style.display = '';
-    lvBtn.textContent = `🕐 Last Visit: ${lastVisit.entry_date}`;
+    const byWho = lastVisit.display_name || lastVisit.username || '';
+    lvBtn.textContent = `🕐 Last Visit Responses — ${lastVisit.entry_date}${byWho ? ' · ' + byWho : ''}`;
     // Autofill from last visit if fields are still empty
     if (lastVisit.bays) document.getElementById('bays-select').value = lastVisit.bays;
     if (lastVisit.visit_contact_name) document.getElementById('visit-contact-name').value = lastVisit.visit_contact_name;
@@ -1584,40 +1585,48 @@ async function onBizChange() {
 function openLastVisitModal() {
   const e = window._lastVisitData;
   if (!e) return;
+
   // Meta
-  document.getElementById('lv-meta').textContent = `${e.entry_date} at ${e.entry_time}`;
+  const byWho = e.display_name || e.username || '—';
+  document.getElementById('lv-meta').textContent = `${e.entry_date}${e.entry_time ? ' at ' + e.entry_time : ''} · by ${byWho}`;
+
   // Photo
   const photoWrap = document.getElementById('lv-photo-wrap');
   if (e.photo_url) { document.getElementById('lv-photo').src = e.photo_url; photoWrap.style.display = 'block'; }
   else { photoWrap.style.display = 'none'; }
-  // Info fields
-  document.getElementById('lv-contact').textContent = e.visit_contact_name || '—';
-  document.getElementById('lv-position').textContent = e.visit_contact_position || '';
-  document.getElementById('lv-bays').textContent = e.bays || '—';
-  document.getElementById('lv-dealer').textContent = e.purchase_from_dealer || '—';
-  document.getElementById('lv-employee').textContent = e.display_name || e.username || '—';
-  // Q&A
+
+  // Q&A — shown first and prominently
   const qaList = document.getElementById('lv-qa-list');
   const answers = e.answers || [];
   if (answers.length) {
     qaList.innerHTML = answers.map(a => `
-      <div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:4px;min-width:36px;text-align:center;
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:0.72rem;font-weight:800;padding:3px 10px;border-radius:5px;min-width:40px;text-align:center;flex-shrink:0;
           background:${a.answer ? 'var(--teal-dim)' : 'var(--red-dim)'};
-          color:${a.answer ? 'var(--teal)' : 'var(--red)'};">
+          color:${a.answer ? 'var(--teal)' : 'var(--red)'};
+          border:1px solid ${a.answer ? 'rgba(0,201,167,0.3)' : 'rgba(255,92,92,0.3)'};">
           ${a.answer ? 'YES' : 'NO'}
         </span>
-        <span style="font-size:0.82rem;">${a.question}</span>
+        <span style="font-size:0.85rem;line-height:1.4;">${a.question}</span>
       </div>`).join('');
     document.getElementById('lv-qa-wrap').style.display = 'block';
   } else {
-    document.getElementById('lv-qa-wrap').style.display = 'none';
+    qaList.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;">No check-in questions were recorded on this visit.</div>';
+    document.getElementById('lv-qa-wrap').style.display = 'block';
   }
+
+  // Info grid
+  document.getElementById('lv-contact').textContent = e.visit_contact_name || '—';
+  document.getElementById('lv-position').textContent = e.visit_contact_position || '';
+  document.getElementById('lv-bays').textContent = e.bays || '—';
+  document.getElementById('lv-dealer').textContent = e.purchase_from_dealer || '—';
+  document.getElementById('lv-employee').textContent = byWho;
+
   // Notes
   const notesWrap = document.getElementById('lv-notes-wrap');
   if (e.notes) { document.getElementById('lv-notes').textContent = e.notes; notesWrap.style.display = 'block'; }
   else { notesWrap.style.display = 'none'; }
-  // Show modal
+
   document.getElementById('last-visit-modal').style.display = 'flex';
   document.body.style.overflow = 'hidden';
 }
