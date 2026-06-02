@@ -1560,11 +1560,26 @@ async function resetEntryForm() {
     .eq('username', currentUser.username);
   assignedBusinesses = (assignments || []).map(a => a.businesses).filter(Boolean);
   assignedBusinesses.sort((a, b) => a.business_name.localeCompare(b.business_name));
+
+  // Query today's entries for these accounts to mark visited businesses
+  const todayISO = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+  const accts = assignedBusinesses.map(b => b.account_number);
+  let visitedToday = new Set();
+  if (accts.length) {
+    const { data: todayEntries } = await db.from('entries')
+      .select('account_number')
+      .in('account_number', accts)
+      .eq('entry_date', todayISO);
+    (todayEntries || []).forEach(e => visitedToday.add(e.account_number));
+  }
+
   if (assignedBusinesses.length) {
     assignedBusinesses.forEach(b => {
       const o = document.createElement('option');
       o.value = b.account_number;
-      o.textContent = `${b.business_name} (${b.account_number})`;
+      const visited = visitedToday.has(b.account_number);
+      o.textContent = `${visited ? '✓ ' : ''}${b.business_name} (${b.account_number})`;
+      if (visited) o.style.color = 'var(--teal)';
       sel.appendChild(o);
     });
   } else {
@@ -1884,6 +1899,7 @@ function entryHTML(e) {
       ${mapsUrl ? `<a class="entry-gps-link" href="${mapsUrl}" target="_blank">📍 View Location (±${Math.round(e.location_accuracy||0)}m)</a>` : '<span style="font-size:0.72rem;color:var(--text3);">📍 No GPS data</span>'}
       ${(e.gps_flag && currentUser?.role === 'owner') ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;margin-left:auto;" onclick="openGpsReviewModal('${e.id}')">🔍 Review GPS</button>` : ''}
       ${currentUser?.role === 'owner' ? `<button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="openEditEntryModal('${e.id}')">✏️ Edit</button>` : ''}
+      ${currentUser?.role === 'owner' ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;" onclick="deleteEntry('${e.id}')">🗑 Delete</button>` : ''}
     </div>
   </div>`;
 }
@@ -3317,6 +3333,17 @@ async function saveEditEntry() {
   }
   showToast('Entry updated ✓');
   closeEditEntryModal();
+  await renderAllEntries();
+}
+
+async function deleteEntry(entryId) {
+  const entry = _entryMap[entryId];
+  const bizName = entry?.business || `Entry #${entryId}`;
+  const dateStr = entry?.entry_date || '';
+  if (!confirm(`Delete visit to "${bizName}"${dateStr ? ' on ' + dateStr : ''}?\n\nThis cannot be undone.`)) return;
+  const { error } = await db.from('entries').delete().eq('id', entryId);
+  if (error) { showToast('Error deleting entry', true); console.error(error); return; }
+  showToast('Entry deleted');
   await renderAllEntries();
 }
 
