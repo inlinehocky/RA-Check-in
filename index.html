@@ -1561,15 +1561,15 @@ async function resetEntryForm() {
   assignedBusinesses = (assignments || []).map(a => a.businesses).filter(Boolean);
   assignedBusinesses.sort((a, b) => a.business_name.localeCompare(b.business_name));
 
-  // Query today's entries for these accounts to mark visited businesses
-  const todayISO = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+  // entry_date is stored as "Jun 2, 2026" format — match exactly
+  const todayFormatted = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const accts = assignedBusinesses.map(b => b.account_number);
   let visitedToday = new Set();
   if (accts.length) {
     const { data: todayEntries } = await db.from('entries')
       .select('account_number')
       .in('account_number', accts)
-      .eq('entry_date', todayISO);
+      .eq('entry_date', todayFormatted);
     (todayEntries || []).forEach(e => visitedToday.add(e.account_number));
   }
 
@@ -1843,6 +1843,7 @@ async function submitEntry() {
   if (error) { showToast('Error saving — try again'); console.error(error); return; }
   showToast('Entry saved! ✓');
   await resetEntryForm();
+  await loadAssignedBusinesses(); // refresh dropdown so today's visits show checkmarks
 }
 
 // ═══ MAP ═══
