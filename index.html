@@ -552,8 +552,12 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         <!-- Add/Edit form -->
         <div id="add-biz-form" style="display:none;margin-bottom:18px;">
           <div class="form-row-2">
-            <div class="form-group"><div class="field-label">Account Number *</div>
-              <input class="field-input" type="text" id="biz-acct" placeholder="e.g. ACC-001" style="margin-bottom:0;"></div>
+            <div class="form-group">
+              <div class="field-label" style="display:flex;align-items:center;gap:6px;">
+                Account Number *
+                <span id="biz-acct-auto-badge" style="font-size:0.65rem;font-weight:700;padding:1px 7px;border-radius:10px;background:var(--teal-dim);color:var(--teal);border:1px solid rgba(0,201,167,0.3);">auto</span>
+              </div>
+              <input class="field-input" type="text" id="biz-acct" placeholder="Generating…" style="margin-bottom:0;" readonly></div>
             <div class="form-group"><div class="field-label">Business Name *</div>
               <input class="field-input" type="text" id="biz-name" placeholder="Business name" style="margin-bottom:0;"></div>
           </div>
@@ -2607,11 +2611,23 @@ function exportCSV() {
 
 // ═══ BUSINESS DIRECTORY ═══
 let editingBizAcct = null;
-function toggleAddBizForm() {
+async function toggleAddBizForm() {
   const form = document.getElementById('add-biz-form');
   const visible = form.style.display !== 'none';
   form.style.display = visible ? 'none' : 'block';
-  if (!visible) { clearBizForm(); editingBizAcct = null; populateZoneDropdown('biz-zone'); }
+  if (!visible) {
+    clearBizForm();
+    editingBizAcct = null;
+    populateZoneDropdown('biz-zone');
+    // Auto-generate account number
+    const acctField = document.getElementById('biz-acct');
+    const badge = document.getElementById('biz-acct-auto-badge');
+    acctField.value = 'Generating…';
+    acctField.readOnly = true;
+    badge.style.display = '';
+    const next = await getNextAccountNumber();
+    acctField.value = next;
+  }
 }
 function clearBizForm() {
   ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng','biz-zone-new'].forEach(id=>document.getElementById(id).value='');
@@ -2784,7 +2800,11 @@ async function editBusiness(acct) {
   const biz = allBusinesses.find(b=>b.account_number===acct); if(!biz) return;
   editingBizAcct = acct;
   await populateZoneDropdown('biz-zone');
-  document.getElementById('biz-acct').value = biz.account_number;
+  // When editing, account number is fixed — show as readonly
+  const acctField = document.getElementById('biz-acct');
+  acctField.value = biz.account_number;
+  acctField.readOnly = true;
+  document.getElementById('biz-acct-auto-badge').style.display = 'none';
   document.getElementById('biz-name').value = biz.business_name;
   document.getElementById('biz-contact').value = biz.contact_name||'';
   document.getElementById('biz-phone').value = biz.phone||'';
