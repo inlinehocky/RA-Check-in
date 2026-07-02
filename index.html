@@ -599,6 +599,17 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
             <div class="form-group"><div class="field-label">Longitude</div>
               <input class="field-input" type="number" step="any" id="biz-lng" placeholder="e.g. -96.7970" style="margin-bottom:0;"></div>
           </div>
+          <!-- Do Not Visit -->
+          <div style="margin-top:10px;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface2);">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+              <input type="checkbox" id="biz-dnv" style="width:16px;height:16px;accent-color:var(--red);" onchange="document.getElementById('biz-dnv-reason-wrap').style.display=this.checked?'block':'none'">
+              <span style="font-size:0.85rem;font-weight:700;color:var(--red);">🚫 Do Not Visit</span>
+            </label>
+            <div id="biz-dnv-reason-wrap" style="display:none;margin-top:10px;">
+              <div class="field-label">Reason <span style="font-weight:400;color:var(--text3);">(visible to owner only)</span></div>
+              <input class="field-input" type="text" id="biz-dnv-reason" placeholder="e.g. Out of business, competitor account…" style="margin-bottom:0;">
+            </div>
+          </div>
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button class="btn btn-primary" onclick="saveBusiness()">Save Business</button>
             <button class="btn btn-outline" onclick="toggleAddBizForm()">Cancel</button>
@@ -1256,13 +1267,13 @@ async function renderZonesTab() {
   const c = document.getElementById('zones-list'); c.innerHTML = '';
 
   // Pull distinct zone values from businesses table
-  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null);
+  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
   const distinctZones = [...new Set((bizZoneData||[]).map(b=>b.zone).filter(Boolean))].sort();
 
   if (!distinctZones.length) { c.innerHTML = '<div class="empty-state">No zones found on businesses yet.</div>'; return; }
 
   // Count businesses per zone value
-  const { data: allBizZones } = await db.from('businesses').select('zone').not('zone','is',null);
+  const { data: allBizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
   const countMap = {};
   (allBizZones||[]).forEach(b => { countMap[b.zone] = (countMap[b.zone]||0) + 1; });
 
@@ -1308,7 +1319,7 @@ async function populateZoneDropdown(selectId) {
   const cur = sel.value;
   while (sel.options.length > 1) sel.remove(1);
   // Pull distinct zone values from businesses table
-  const { data } = await db.from('businesses').select('zone').not('zone', 'is', null);
+  const { data } = await db.from('businesses').select('zone').not('zone', 'is', null).eq('active_ind', 1);
   const distinctZones = [...new Set((data || []).map(b => b.zone).filter(Boolean))].sort();
   distinctZones.forEach(zv => {
     const o = document.createElement('option');
@@ -1393,10 +1404,16 @@ function detectEmployeeZone() {
 }
 
 async function detectEmployeeZoneFromDB() {
-  // Primary: use user_zones table
-  const { data } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username).limit(1);
-  if (data && data.length) return data[0].zone_key;
-  // Fallback: infer from assigned businesses
+  // Primary: use user_zones table — but verify the zone exists on an active business
+  const { data: userZones } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username);
+  if (userZones && userZones.length) {
+    for (const uz of userZones) {
+      const { data: active } = await db.from('businesses')
+        .select('zone').eq('zone', uz.zone_key).eq('active_ind', 1).limit(1);
+      if (active && active.length) return uz.zone_key;
+    }
+  }
+  // Fallback: infer from active assigned businesses only (assignedBusinesses is already filtered)
   return detectEmployeeZone();
 }
 
@@ -1499,7 +1516,7 @@ async function getZoneMapUrl() {
   if (assignments && assignments.length) {
     const accts = assignments.map(a => a.account_number);
     const { data: bizList } = await db.from('businesses')
-      .select('zone').in('account_number', accts).not('zone', 'is', null);
+      .select('zone').in('account_number', accts).not('zone', 'is', null).eq('active_ind', 1);
     (bizList || []).forEach(b => { if (b.zone) candidateZones.add(b.zone); });
   }
 
@@ -1560,9 +1577,9 @@ async function resetEntryForm() {
   const sel = document.getElementById('biz-select');
   sel.innerHTML = '<option value="">— Select business —</option>';
   const { data: assignments } = await db.from('business_assignments')
-    .select('account_number, businesses(account_number, business_name, address, city, state, zip, phone, contact_name, business_type, zone)')
+    .select('account_number, businesses(account_number, business_name, address, city, state, zip, phone, contact_name, business_type, zone, do_not_visit, active_ind)')
     .eq('username', currentUser.username);
-  assignedBusinesses = (assignments || []).map(a => a.businesses).filter(Boolean);
+  assignedBusinesses = (assignments || []).map(a => a.businesses).filter(b => b && !b.do_not_visit && b.active_ind !== 0);
   assignedBusinesses.sort((a, b) => a.business_name.localeCompare(b.business_name));
 
   // entry_date is stored as "Jun 2, 2026" format — match exactly
@@ -2630,10 +2647,12 @@ async function toggleAddBizForm() {
   }
 }
 function clearBizForm() {
-  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng','biz-zone-new'].forEach(id=>document.getElementById(id).value='');
+  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng','biz-zone-new','biz-dnv-reason'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('biz-zone').value='';
   document.getElementById('biz-zone-new-wrap').style.display='none';
   document.getElementById('biz-type').value='';
+  document.getElementById('biz-dnv').checked=false;
+  document.getElementById('biz-dnv-reason-wrap').style.display='none';
 }
 async function saveBusiness() {
   await ensureSession();
@@ -2643,6 +2662,12 @@ async function saveBusiness() {
   if (document.getElementById('biz-zone').value === '__new__' && !document.getElementById('biz-zone-new').value.trim()) {
     showToast('Enter a zone key or select an existing zone'); return;
   }
+  const zoneVal = (() => {
+    const sel = document.getElementById('biz-zone');
+    if (sel.value === '__new__') return document.getElementById('biz-zone-new').value.trim() || null;
+    return sel.value || null;
+  })();
+
   const payload = {
     account_number: acct, business_name: name,
     contact_name: toProperCase(document.getElementById('biz-contact').value.trim())||null,
@@ -2652,18 +2677,14 @@ async function saveBusiness() {
     state: document.getElementById('biz-state').value.trim()||null,
     zip: document.getElementById('biz-zip').value.trim()||null,
     email: document.getElementById('biz-email').value.trim()||null,
-    zone: (() => {
-      const sel = document.getElementById('biz-zone');
-      if (sel.value === '__new__') {
-        const newZone = document.getElementById('biz-zone-new').value.trim();
-        return newZone || null;
-      }
-      return sel.value || null;
-    })(),
     business_type: document.getElementById('biz-type').value||null,
     latitude: parseFloat(document.getElementById('biz-lat').value)||null,
     longitude: parseFloat(document.getElementById('biz-lng').value)||null,
+    do_not_visit: document.getElementById('biz-dnv').checked,
+    dnv_reason: document.getElementById('biz-dnv').checked ? (document.getElementById('biz-dnv-reason').value.trim()||null) : null,
   };
+  // Only include zone if a value is set — prevents overwriting existing zone with null on edit
+  if (zoneVal) payload.zone = zoneVal;
   const { error } = await db.from('businesses').upsert(payload, {onConflict:'account_number'});
   if (error) { showToast('Error saving business'); console.error(error); return; }
   // Hide form and reset state before re-rendering
@@ -2787,10 +2808,18 @@ function filterBizDirectory() {
         <div style="font-size:0.72rem;color:var(--text3);">${[b.city,b.state].filter(Boolean).join(', ')} ${b.phone?'· '+b.phone:''}</div>
       </div>
       <span class="biz-acct">#${b.account_number}</span>
+      ${!b.active_ind
+        ? `<span style="font-size:0.7rem;font-weight:800;padding:2px 8px;border-radius:5px;background:var(--surface2);color:var(--text3);border:1px solid var(--border);">INACTIVE</span>`
+        : ''}
+      ${b.do_not_visit ? `<span style="font-size:0.7rem;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(255,92,92,0.15);color:var(--red);border:1px solid rgba(255,92,92,0.3);" title="${b.dnv_reason||''}">🚫 DNV${b.dnv_reason ? ' — '+b.dnv_reason : ''}</span>` : ''}
       ${b.zone ? `<span style="font-size:0.7rem;color:var(--text3);font-style:italic;">${zoneName}</span>` : ''}
       ${b.business_type ? `<span style="font-size:0.7rem;color:${b.business_type==='Mechanical'?'var(--blue)':'var(--red)'};font-weight:700;">${b.business_type}</span>` : ''}
       ${(b.latitude && b.longitude) ? `<a href="https://www.google.com/maps?q=${b.latitude},${b.longitude}" target="_blank" style="font-size:0.7rem;color:var(--teal);text-decoration:none;" title="${b.latitude.toFixed(5)}, ${b.longitude.toFixed(5)}">📍 Map</a>` : ''}
       <button class="btn btn-outline" style="font-size:0.72rem;padding:5px 10px;" onclick="editBusiness('${b.account_number}')">Edit</button>
+      ${b.active_ind
+        ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:5px 10px;" onclick="setBusinessActive('${b.account_number}', false)">Deactivate</button>`
+        : `<button class="btn btn-outline" style="font-size:0.72rem;padding:5px 10px;border-color:var(--teal);color:var(--teal);" onclick="setBusinessActive('${b.account_number}', true)">✓ Reactivate</button>`
+      }
       <button class="btn btn-danger" style="font-size:0.72rem;padding:5px 10px;" onclick="deleteBusiness('${b.account_number}')">✕</button>`;
     c.appendChild(row);
   });
@@ -2819,6 +2848,11 @@ async function editBusiness(acct) {
   document.getElementById('biz-type').value = biz.business_type||'';
   document.getElementById('biz-lat').value = biz.latitude||'';
   document.getElementById('biz-lng').value = biz.longitude||'';
+  // DNV
+  const dnvChecked = !!biz.do_not_visit;
+  document.getElementById('biz-dnv').checked = dnvChecked;
+  document.getElementById('biz-dnv-reason').value = biz.dnv_reason||'';
+  document.getElementById('biz-dnv-reason-wrap').style.display = dnvChecked ? 'block' : 'none';
   document.getElementById('add-biz-form').style.display = 'block';
   document.getElementById('add-biz-form').scrollIntoView({behavior:'smooth'});
 }
@@ -2826,6 +2860,16 @@ async function deleteBusiness(acct) {
   if(!confirm(`Delete business #${acct}?`)) return;
   await db.from('businesses').delete().eq('account_number',acct);
   await renderBusinessDirectory(); showToast('Business deleted');
+}
+
+async function setBusinessActive(acct, active) {
+  const biz = allBusinesses.find(b => b.account_number === acct);
+  const label = active ? 'reactivate' : 'deactivate';
+  if (!confirm(`${active ? 'Reactivate' : 'Deactivate'} "${biz?.business_name || acct}"?`)) return;
+  const { error } = await db.from('businesses').update({ active_ind: active ? 1 : 0 }).eq('account_number', acct);
+  if (error) { showToast(`Error: could not ${label} business`, true); console.error(error); return; }
+  showToast(`Business ${active ? 'reactivated' : 'deactivated'} ✓`);
+  await renderBusinessDirectory();
 }
 
 // ═══ USERS TAB ═══
@@ -2854,7 +2898,7 @@ async function renderEmpZoneList() {
   const { data: emps } = await db.from('users').select('*').eq('role','employee').order('username');
   if (!emps || !emps.length) { c.innerHTML = '<div class="empty-state" style="padding:12px 0;">No employees yet.</div>'; return; }
   // Get all distinct zones from businesses table
-  const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null);
+  const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
   const allBizZones = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
   // Get all user_zone assignments
   const { data: userZones } = await db.from('user_zones').select('*');
@@ -2985,9 +3029,9 @@ function renderBizAssignListUI() {
     const zoneName = allZones.find(z=>z.zone_key===b.zone)?.zone_name||b.zone||'';
     const row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);';
-    row.innerHTML=`<input type="checkbox" id="chk-${b.account_number}" ${checked?'checked':''} style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer;">
-      <label for="chk-${b.account_number}" style="flex:1;cursor:pointer;">
-        <div style="font-size:0.85rem;font-weight:600;">${b.business_name} ${b.business_type?`<span style="font-size:0.65rem;font-weight:800;color:${b.business_type==='Mechanical'?'var(--blue)':'var(--red)'}">${b.business_type}</span>`:''}</div>
+    row.innerHTML=`<input type="checkbox" id="chk-${b.account_number}" ${checked?'checked':''} ${b.active_ind===0?'disabled':''} style="width:16px;height:16px;accent-color:var(--gold);cursor:pointer;">
+      <label for="chk-${b.account_number}" style="flex:1;cursor:pointer;${b.active_ind===0?'opacity:0.5':''}">
+        <div style="font-size:0.85rem;font-weight:600;">${b.business_name} ${b.business_type?`<span style="font-size:0.65rem;font-weight:800;color:${b.business_type==='Mechanical'?'var(--blue)':'var(--red)'}">${b.business_type}</span>`:''} ${b.active_ind===0?'<span style="font-size:0.65rem;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--surface2);color:var(--text3);">INACTIVE</span>':''}</div>
         <div style="font-size:0.7rem;color:var(--text3);">#${b.account_number} ${b.city?'· '+b.city:''} ${zoneName?'· '+zoneName:''}</div>
       </label>`;
     row.querySelector('input').onchange=(e)=>toggleAssignment(b.account_number,e.target.checked);
@@ -3066,7 +3110,7 @@ async function removeEmployee(username) {
 // ═══ MAP LINK EDITOR ═══
 async function renderMapLinkEditor() {
   const c = document.getElementById('map-link-editor'); c.innerHTML = '';
-  const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null);
+  const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
   const zones = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
   if (!zones.length) { c.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;">No zones found in business table yet.</div>'; return; }
   const { data: links } = await db.from('zone_map_links').select('*');
