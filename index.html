@@ -585,7 +585,9 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
               <div id="biz-zone-new-wrap" style="display:none;margin-top:6px;">
                 <input class="field-input" type="text" id="biz-zone-new" placeholder="New zone key (e.g. HOU, DAL02)" style="margin-bottom:0;">
                 <div style="font-size:0.7rem;color:var(--text3);margin-top:4px;font-style:italic;">This zone will be created when you save the business.</div>
-              </div></div>
+              </div>
+              <input class="field-input" type="text" id="biz-zone-free" placeholder="Or type a zone code directly (e.g. DAL02)" style="margin-top:6px;margin-bottom:0;" oninput="onBizZoneFreeInput(this)">
+              <div style="font-size:0.7rem;color:var(--text3);margin-top:3px;">Select from list or type a new zone code</div></div>
             <div class="form-group"><div class="field-label">Business Type</div>
               <select class="field-input" id="biz-type" style="margin-bottom:0;">
                 <option value="">— Select Type —</option>
@@ -718,18 +720,28 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
   <!-- TAB: Zones (owner) -->
   <div class="tab-pane" id="tab-zones">
     <div class="tab-scroll">
+      <!-- Business Zones (from businesses table) -->
       <div class="card">
         <div class="card-head">
-          <div><div class="card-title">📍 Zones</div>
-            <div class="card-sub">Zones are pulled from your businesses. Add a friendly name to each zone key for use in reports.</div></div>
+          <div><div class="card-title">📍 Business Zones</div>
+            <div class="card-sub">Zone codes assigned to your businesses. Click ✏️ Name to map a zone code to a Region for use in reports.</div></div>
         </div>
         <div id="zones-list"></div>
+      </div>
+
+      <!-- Regions (zones table — friendly name aliases) -->
+      <div class="card">
+        <div class="card-head">
+          <div><div class="card-title">🗂️ Regions</div>
+            <div class="card-sub">Regions group zone codes under a friendly name (e.g. "DAL" → "Dallas"). Reports and route maps use Region names. Only add a Region here if it doesn't already appear above.</div></div>
+        </div>
+        <div id="regions-list"></div>
         <div class="divider"></div>
-        <div class="section-label">Add Friendly Name Manually</div>
+        <div class="section-label">Add Region</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <input class="field-input" type="text" id="new-zone-key" placeholder="Zone key (e.g. DAL)" style="width:120px;flex:none;margin-bottom:0;">
+          <input class="field-input" type="text" id="new-zone-key" placeholder="Region key (e.g. DAL)" style="width:130px;flex:none;margin-bottom:0;">
           <input class="field-input" type="text" id="new-zone-name" placeholder="Friendly name (e.g. Dallas)" style="flex:1;min-width:150px;margin-bottom:0;">
-          <button class="btn btn-primary" onclick="addZone()">Add</button>
+          <button class="btn btn-primary" onclick="addZone()">Add Region</button>
         </div>
       </div>
     </div>
@@ -1098,6 +1110,15 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div class="form-group"><div class="field-label">Longitude</div>
         <input class="field-input" type="number" step="any" id="nb-lng" placeholder="Auto from GPS" style="margin-bottom:0;"></div>
     </div>
+    <div class="form-group"><div class="field-label">Zone</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select class="field-input" id="nb-zone-select" style="margin-bottom:0;flex:1;" onchange="onNbZoneSelectChange()">
+          <option value="">— Select or type below —</option>
+        </select>
+      </div>
+      <input class="field-input" type="text" id="nb-zone-free" placeholder="Or type a zone code (e.g. DAL02)" style="margin-top:6px;margin-bottom:0;" oninput="onNbZoneFreeInput(this)">
+      <div style="font-size:0.7rem;color:var(--text3);margin-top:3px;">Select from list or type a new zone code</div>
+    </div>
     <button class="btn btn-outline" style="font-size:0.75rem;padding:6px 14px;margin-bottom:14px;" onclick="captureGPSForNewBiz()">📍 Capture Current GPS</button>
     <div style="display:flex;gap:8px;margin-top:6px;">
       <button class="btn btn-primary btn-full" id="nb-save-btn" onclick="saveNewBizFromEntry()">Add &amp; Select Business</button>
@@ -1211,7 +1232,7 @@ async function ensureSession() {
 function buildNav() {
   const nav = document.getElementById('nav-tabs'); nav.innerHTML = '';
   const tabs = currentUser.role === 'owner'
-    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones'],['tab-settings','⚙️ Settings'],['tab-help','❓ Help']]
+    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones & Regions'],['tab-settings','⚙️ Settings'],['tab-help','❓ Help']]
     : [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-help','❓ Help']];
   tabs.forEach(([id, label]) => {
     const b = document.createElement('div');
@@ -1270,24 +1291,41 @@ async function renderZonesTab() {
   const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
   const distinctZones = [...new Set((bizZoneData||[]).map(b=>b.zone).filter(Boolean))].sort();
 
-  if (!distinctZones.length) { c.innerHTML = '<div class="empty-state">No zones found on businesses yet.</div>'; return; }
+  if (!distinctZones.length) { c.innerHTML = '<div class="empty-state">No zones found on businesses yet.</div>'; }
+  else {
+    // Count businesses per zone value
+    const countMap = {};
+    bizZoneData.forEach(b => { countMap[b.zone] = (countMap[b.zone]||0) + 1; });
 
-  // Count businesses per zone value
-  const { data: allBizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
-  const countMap = {};
-  (allBizZones||[]).forEach(b => { countMap[b.zone] = (countMap[b.zone]||0) + 1; });
+    distinctZones.forEach(zv => {
+      const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+      const friendlyName = zObj ? zObj.zone_name : '';
+      const row = document.createElement('div'); row.className = 'biz-row';
+      row.innerHTML = `
+        <span class="biz-acct" style="min-width:60px;text-align:center;">${zv}</span>
+        <div style="flex:1;font-weight:700;font-size:0.88rem;">${friendlyName
+          ? `<span style="color:var(--teal);">${friendlyName}</span>`
+          : '<span style="color:var(--text3);font-style:italic;font-weight:400;">No region mapped</span>'}</div>
+        <span style="font-size:0.72rem;color:var(--text3);">${countMap[zv]||0} businesses</span>
+        <button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="setZoneName('${zv}','${friendlyName}')">✏️ Map Region</button>`;
+      c.appendChild(row);
+    });
+  }
 
-  distinctZones.forEach(zv => {
-    const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
-    const friendlyName = zObj ? zObj.zone_name : '';
-    const row = document.createElement('div'); row.className = 'biz-row';
-    row.innerHTML = `
-      <span class="biz-acct" style="min-width:60px;text-align:center;">${zv}</span>
-      <div style="flex:1;font-weight:700;font-size:0.88rem;">${friendlyName || '<span style="color:var(--text3);font-style:italic;font-weight:400;">No friendly name set</span>'}</div>
-      <span style="font-size:0.72rem;color:var(--text3);">${countMap[zv]||0} businesses</span>
-      <button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="setZoneName('${zv}','${friendlyName}')">✏️ Name</button>`;
-    c.appendChild(row);
-  });
+  // Render Regions list (zones table)
+  const rc = document.getElementById('regions-list'); rc.innerHTML = '';
+  if (!allZones.length) {
+    rc.innerHTML = '<div class="empty-state">No regions defined yet.</div>';
+  } else {
+    allZones.forEach(z => {
+      const row = document.createElement('div'); row.className = 'biz-row';
+      row.innerHTML = `
+        <span class="biz-acct" style="min-width:60px;text-align:center;">${z.zone_key}</span>
+        <div style="flex:1;font-weight:700;font-size:0.88rem;">${z.zone_name}</div>
+        <button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;" onclick="deleteZone(${z.id})">✕ Delete</button>`;
+      rc.appendChild(row);
+    });
+  }
 }
 
 async function setZoneName(zoneKey, current) {
@@ -1339,6 +1377,13 @@ async function populateZoneDropdown(selectId) {
   if (cur && cur !== '__new__') sel.value = cur;
 }
 
+function onBizZoneFreeInput(el) {
+  if (el.value.trim()) {
+    // Clear the dropdown selection when typing freely
+    document.getElementById('biz-zone').value = '';
+    document.getElementById('biz-zone-new-wrap').style.display = 'none';
+  }
+}
 function onBizZoneSelectChange() {
   const sel = document.getElementById('biz-zone');
   const wrap = document.getElementById('biz-zone-new-wrap');
@@ -1370,7 +1415,7 @@ async function toggleNewBizPanel() {
     document.body.style.overflow = '';
   } else {
     // Clear fields
-    ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip','nb-lat','nb-lng'].forEach(id => document.getElementById(id).value = '');
+    ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip','nb-lat','nb-lng','nb-zone-free'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('nb-type').value = '';
     // Zone hint
     // Zone hint — fetch from user_zones
@@ -1389,9 +1434,37 @@ async function toggleNewBizPanel() {
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
     setTimeout(() => document.getElementById('nb-name').focus(), 100);
+    // Populate zone dropdown
+    const nbZoneSel = document.getElementById('nb-zone-select');
+    nbZoneSel.innerHTML = '<option value="">— Select or type below —</option>';
+    document.getElementById('nb-zone-free').value = '';
+    const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
+    const zones = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
+    zones.forEach(z => {
+      const o = document.createElement('option');
+      o.value = z;
+      const zObj = allZones.find(az => z.toUpperCase().startsWith(az.zone_key.toUpperCase()));
+      o.textContent = zObj ? `${z} — ${zObj.zone_name}` : z;
+      nbZoneSel.appendChild(o);
+    });
+    // Pre-select employee's zone if detectable
+    const detectedZone = await detectEmployeeZoneFromDB();
+    if (detectedZone) nbZoneSel.value = detectedZone;
   }
 }
 
+function onNbZoneSelectChange() {
+  const sel = document.getElementById('nb-zone-select');
+  if (sel.value) document.getElementById('nb-zone-free').value = '';
+}
+function onNbZoneFreeInput(el) {
+  if (el.value.trim()) document.getElementById('nb-zone-select').value = '';
+}
+function getNbZoneValue() {
+  const free = document.getElementById('nb-zone-free').value.trim().toUpperCase();
+  if (free) return free;
+  return document.getElementById('nb-zone-select').value || null;
+}
 function detectEmployeeZone() {
   // Derive zone from the majority of assigned businesses (fallback if no user_zones set)
   if (!assignedBusinesses.length) return null;
@@ -1448,8 +1521,8 @@ async function saveNewBizFromEntry() {
   if (!name) { showToast('Business name is required'); return; }
   if (!type) { showToast('Please select a business type'); return; }
 
-  const zoneKey = await detectEmployeeZoneFromDB();
-  if (!zoneKey) { showToast('Could not detect zone — ask the owner to assign your zones'); return; }
+  const zoneKey = getNbZoneValue() || await detectEmployeeZoneFromDB();
+  if (!zoneKey) { showToast('Please select or enter a zone'); return; }
 
   const btn = document.getElementById('nb-save-btn');
   btn.disabled = true; btn.textContent = 'Saving…';
@@ -2652,7 +2725,7 @@ async function toggleAddBizForm() {
   }
 }
 function clearBizForm() {
-  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng','biz-zone-new','biz-dnv-reason'].forEach(id=>document.getElementById(id).value='');
+  ['biz-acct','biz-name','biz-contact','biz-phone','biz-addr','biz-city','biz-state','biz-zip','biz-email','biz-lat','biz-lng','biz-zone-new','biz-dnv-reason','biz-zone-free'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('biz-zone').value='';
   document.getElementById('biz-zone-new-wrap').style.display='none';
   document.getElementById('biz-type').value='';
@@ -2668,6 +2741,9 @@ async function saveBusiness() {
     showToast('Enter a zone key or select an existing zone'); return;
   }
   const zoneVal = (() => {
+    // Free-type field takes priority
+    const free = document.getElementById('biz-zone-free').value.trim().toUpperCase();
+    if (free) return free;
     const sel = document.getElementById('biz-zone');
     if (sel.value === '__new__') return document.getElementById('biz-zone-new').value.trim() || null;
     return sel.value || null;
@@ -3597,9 +3673,13 @@ const INFO_CONTENT = {
     title: '🚗 Collision Questions',
     body: 'Yes/No questions shown when checking in at a Collision business. Separate from Mechanical questions — you can customize each list independently.'
   },
-  '📍 Zones': {
-    title: '📍 Zones',
-    body: 'Zone keys come from the zone field on your businesses. Add a friendly display name to each zone key so reports show "Dallas" instead of "DAL". Multiple zone keys that share a prefix (DAL, DAL01, DAL02) are grouped together in reports.'
+  '📍 Business Zones': {
+    title: '📍 Business Zones',
+    body: 'Zone codes come from the zone field on your businesses (e.g. DAL01, DAL02, FTW01). Click ✏️ Map Region to link a zone code to a Region name used in reports.'
+  },
+  '🗂️ Regions': {
+    title: '🗂️ Regions',
+    body: 'Regions are friendly name aliases stored in the Regions table (e.g. DAL → "Dallas", FTW → "Fort Worth"). Multiple zone codes that share a prefix (DAL, DAL01, DAL02) roll up to the same Region in reports and route maps. Add a Region here if it does not already exist.'
   },
   '⚙️ Report Settings': {
     title: '⚙️ Report Settings',
