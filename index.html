@@ -6,6 +6,8 @@
 <title>RA Parts Solutions</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 :root {
   --bg:#0f1117; --surface:#181c25; --surface2:#1e2230;
@@ -451,15 +453,13 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
   <!-- TAB: Route Map -->
   <div class="tab-pane map-pane" id="tab-map">
     <div class="map-toolbar">
-      <span style="font-size:0.72rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);">🗺️ Today's Route</span>
-      <div class="map-url-pill" id="map-url-pill">No map link set</div>
-      <a class="map-ext-btn" id="map-ext-link" href="#" target="_blank">↗ Open Full Map</a>
+      <span style="font-size:0.72rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);">🗺️ Route Map</span>
+      <a class="map-ext-btn" id="map-ext-link" href="#" target="_blank" style="display:none;">↗ Open Zone Map</a>
     </div>
-    <div class="map-frame-area" id="map-frame-area">
-      <div class="map-placeholder"><div style="font-size:2.5rem;">🗺️</div>
-        <div>No route map set for today.</div>
-        <div style="font-size:0.75rem;">Ask the owner to add today's Google Maps link.</div></div>
-    </div>
+    <div class="map-frame-area" id="map-frame-area" style="min-height:200px;"></div>
+    <div id="map-leaflet" style="height:320px;display:none;border-top:1px solid var(--border);"></div>
+    <!-- Business stops list -->
+    <div id="map-stops-area" style="padding:12px 16px 0;"></div>
   </div>
 
   <!-- TAB: All Entries (owner) -->
@@ -565,7 +565,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
             <div class="form-group"><div class="field-label">Contact Name</div>
               <input class="field-input" type="text" id="biz-contact" placeholder="Contact name" style="margin-bottom:0;"></div>
             <div class="form-group"><div class="field-label">Phone</div>
-              <input class="field-input" type="tel" id="biz-phone" placeholder="(555) 000-0000" style="margin-bottom:0;"></div>
+              <input class="field-input" type="tel" id="biz-phone" placeholder="(555) 000-0000" style="margin-bottom:0;" oninput="formatPhoneInput(this)"></div>
           </div>
           <div class="form-group"><div class="field-label">Address</div>
             <input class="field-input" type="text" id="biz-addr" placeholder="Street address" style="margin-bottom:0;"></div>
@@ -1092,7 +1092,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div class="form-group"><div class="field-label">Contact Name</div>
         <input class="field-input" type="text" id="nb-contact" placeholder="Contact name" style="margin-bottom:0;"></div>
       <div class="form-group"><div class="field-label">Phone</div>
-        <input class="field-input" type="tel" id="nb-phone" placeholder="(555) 000-0000" style="margin-bottom:0;"></div>
+        <input class="field-input" type="tel" id="nb-phone" placeholder="(555) 000-0000" style="margin-bottom:0;" oninput="formatPhoneInput(this)"></div>
     </div>
     <div class="form-group"><div class="field-label">Address</div>
       <input class="field-input" type="text" id="nb-addr" placeholder="Street address" style="margin-bottom:0;"></div>
@@ -1642,37 +1642,44 @@ async function resetEntryForm() {
   document.getElementById('prog-label').textContent = '0 answered';
   setGPS('waiting', 'Location will be captured on submit');
 
-  const url = (await getZoneMapUrl()) || '';
-  document.getElementById('map-banner-yes').style.display = url ? 'flex' : 'none';
-  document.getElementById('map-banner-no').style.display = url ? 'none' : 'block';
-  if (url) document.getElementById('map-banner-link').href = url;
-
   const sel = document.getElementById('biz-select');
   sel.innerHTML = '<option value="">— Select business —</option>';
   const { data: assignments } = await db.from('business_assignments')
-    .select('account_number, businesses(account_number, business_name, address, city, state, zip, phone, contact_name, business_type, zone, do_not_visit, active_ind)')
+    .select('account_number, businesses(account_number, business_name, address, city, state, zip, phone, contact_name, business_type, zone, do_not_visit, active_ind, latitude, longitude)')
     .eq('username', currentUser.username);
   assignedBusinesses = (assignments || []).map(a => a.businesses).filter(b => b && !b.do_not_visit && b.active_ind !== 0);
   assignedBusinesses.sort((a, b) => a.business_name.localeCompare(b.business_name));
 
-  // entry_date is stored as "Jun 2, 2026" format — match exactly
+  // entry_date stored as "Jun 2, 2026" format
   const todayFormatted = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const accts = assignedBusinesses.map(b => b.account_number);
   let visitedToday = new Set();
   if (accts.length) {
     const { data: todayEntries } = await db.from('entries')
-      .select('account_number')
-      .in('account_number', accts)
-      .eq('entry_date', todayFormatted);
+      .select('account_number').in('account_number', accts).eq('entry_date', todayFormatted);
     (todayEntries || []).forEach(e => visitedToday.add(e.account_number));
   }
+
+  // Build banner route URL now that assignedBusinesses and visitedToday are populated
+  const unvisitedBanner = assignedBusinesses.filter(b => !visitedToday.has(b.account_number) && [b.address, b.city, b.state].some(Boolean));
+  const bannerStops = (unvisitedBanner.length ? unvisitedBanner : assignedBusinesses.filter(b => [b.address, b.city, b.state].some(Boolean)))
+    .slice().sort((a, b) => (b.latitude || 0) - (a.latitude || 0)); // north to south
+  let bannerUrl = null;
+  if (bannerStops.length) {
+    const addrs = bannerStops.map(b => encodeURIComponent([b.address, b.city, b.state, b.zip].filter(Boolean).join(', '))).join('/');
+    bannerUrl = 'https://www.google.com/maps/dir/' + addrs;
+  }
+  if (!bannerUrl) bannerUrl = (await getZoneMapUrl()) || '';
+  document.getElementById('map-banner-yes').style.display = bannerUrl ? 'flex' : 'none';
+  document.getElementById('map-banner-no').style.display = bannerUrl ? 'none' : 'block';
+  if (bannerUrl) document.getElementById('map-banner-link').href = bannerUrl;
 
   if (assignedBusinesses.length) {
     assignedBusinesses.forEach(b => {
       const o = document.createElement('option');
       o.value = b.account_number;
       const visited = visitedToday.has(b.account_number);
-      o.textContent = `${visited ? '✓ ' : ''}${b.business_name} (${b.account_number})`;
+      o.textContent = (visited ? '\u2713 ' : '') + b.business_name + ' (' + b.account_number + ')';
       if (visited) o.style.color = 'var(--teal)';
       sel.appendChild(o);
     });
@@ -1680,7 +1687,6 @@ async function resetEntryForm() {
     sel.innerHTML = '<option value="">No businesses assigned yet</option>';
   }
 }
-
 async function onBizChange() {
   const acct = document.getElementById('biz-select').value;
   const biz = assignedBusinesses.find(b => b.account_number === acct);
@@ -1722,7 +1728,16 @@ async function onBizChange() {
     const byWho = lastVisit.display_name || lastVisit.username || '';
     lvBtn.textContent = `🕐 Last Visit Responses — ${lastVisit.entry_date}${byWho ? ' · ' + byWho : ''}`;
     // Autofill from last visit if fields are still empty
-    if (lastVisit.bays) document.getElementById('bays-select').value = lastVisit.bays;
+    if (lastVisit.bays) {
+      // Use rAF so the select is visible/rendered before setting value
+      requestAnimationFrame(() => {
+        const baysSel = document.getElementById('bays-select');
+        baysSel.value = lastVisit.bays;
+        if (baysSel.value !== lastVisit.bays) {
+          for (const o of baysSel.options) { if (o.value === lastVisit.bays) { o.selected = true; break; } }
+        }
+      });
+    }
     if (lastVisit.visit_contact_name) document.getElementById('visit-contact-name').value = lastVisit.visit_contact_name;
     if (lastVisit.visit_contact_position) document.getElementById('visit-contact-position').value = lastVisit.visit_contact_position;
   } else {
@@ -1942,25 +1957,179 @@ async function submitEntry() {
 
 // ═══ MAP ═══
 async function renderMapPane() {
-  const url = (await getZoneMapUrl()) || '';
-  document.getElementById('map-url-pill').textContent = url || 'No map link set';
-  document.getElementById('map-ext-link').href = url || '#';
-  const area = document.getElementById('map-frame-area');
-  if (!url) {
-    area.innerHTML = `<div class="map-placeholder"><div style="font-size:2.5rem;">🗺️</div><div>No route map set for your zone.</div><div style="font-size:0.75rem;">Ask the owner to add a Google Maps link in the Zones tab.</div></div>`;
-    return;
+  const frameArea = document.getElementById('map-frame-area');
+  const stopsArea = document.getElementById('map-stops-area');
+  const extLink = document.getElementById('map-ext-link');
+  frameArea.innerHTML = '<div class="map-placeholder"><div style="font-size:2rem;">⏳</div><div>Loading your stops…</div></div>';
+  stopsArea.innerHTML = '';
+
+  // Get assigned businesses with addresses
+  const { data: assignments } = await db.from('business_assignments')
+    .select('account_number, businesses(account_number, business_name, address, city, state, zip, business_type, do_not_visit, active_ind, latitude, longitude)')
+    .eq('username', currentUser.username);
+
+  const businesses = (assignments || [])
+    .map(a => a.businesses)
+    .filter(b => b && b.active_ind !== 0 && !b.do_not_visit);
+
+  // Get today's visited accounts
+  const todayFmt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const accts = businesses.map(b => b.account_number);
+  let visitedToday = new Set();
+  if (accts.length) {
+    const { data: todayEntries } = await db.from('entries')
+      .select('account_number').in('account_number', accts).eq('entry_date', todayFmt);
+    (todayEntries || []).forEach(e => visitedToday.add(e.account_number));
   }
-  // Google Maps blocks iframe embedding — show a launch button instead
-  area.innerHTML = `
-    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;min-height:320px;gap:20px;padding:32px;text-align:center;">
-      <div style="font-size:3.5rem;">🗺️</div>
-      <div style="font-size:1rem;font-weight:700;color:var(--text);">Your Route Map is Ready</div>
-      <div style="font-size:0.78rem;color:var(--text3);max-width:280px;line-height:1.5;">Google Maps can't be embedded directly, but your full route opens in one tap.</div>
-      <a href="${url}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:10px;background:var(--teal);color:#000;font-size:0.95rem;font-weight:800;padding:14px 28px;border-radius:12px;text-decoration:none;box-shadow:0 4px 18px rgba(0,201,167,0.4);letter-spacing:0.01em;">
-        🗺️ Open Route in Google Maps ↗
-      </a>
-      <div style="font-size:0.68rem;color:var(--text3);word-break:break-all;max-width:320px;">${url}</div>
+
+  // Build address strings
+  const withAddr = businesses.map(b => ({
+    ...b,
+    fullAddr: [b.address, b.city, b.state, b.zip].filter(Boolean).join(', '),
+    visited: visitedToday.has(b.account_number)
+  }));
+
+  const byLatDesc = (a, b) => (b.latitude || 0) - (a.latitude || 0);
+  const unvisited = withAddr.filter(b => !b.visited && b.fullAddr).sort(byLatDesc);
+  const visited   = withAddr.filter(b => b.visited && b.fullAddr).sort(byLatDesc);
+  const noAddr    = withAddr.filter(b => !b.fullAddr);
+
+  // Build Google Maps directions URL for unvisited stops
+  // Google Maps directions: https://www.google.com/maps/dir/addr1/addr2/...
+  function buildMapsUrl(stops) {
+    if (!stops.length) return null;
+    const encoded = stops.map(b => encodeURIComponent(b.fullAddr)).join('/');
+    return `https://www.google.com/maps/dir/${encoded}`;
+  }
+
+  const allStopsUrl = buildMapsUrl([...unvisited, ...visited]);
+  const unvisitedUrl = buildMapsUrl(unvisited);
+
+  // Zone map link (existing feature)
+  const zoneUrl = await getZoneMapUrl();
+  if (zoneUrl) {
+    extLink.href = zoneUrl;
+    extLink.style.display = '';
+  } else {
+    extLink.style.display = 'none';
+  }
+
+  // Route buttons in frame area
+  if (!businesses.length) {
+    frameArea.innerHTML = `<div class="map-placeholder"><div style="font-size:2.5rem;">🗺️</div><div>No businesses assigned yet.</div><div style="font-size:0.75rem;">Ask the owner to assign businesses to your account.</div></div>`;
+  } else if (!unvisited.length && !visited.length) {
+    frameArea.innerHTML = `<div class="map-placeholder"><div style="font-size:2.5rem;">✅</div><div>All stops visited today!</div></div>`;
+  } else {
+    const total = businesses.length;
+    const doneCount = visitedToday.size;
+    frameArea.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px 20px;text-align:center;">
+        <div style="font-size:0.85rem;color:var(--text2);">
+          <span style="font-size:1.4rem;font-weight:800;color:var(--teal);">${doneCount}</span>
+          <span style="color:var(--text3);"> / </span>
+          <span style="font-size:1.4rem;font-weight:800;">${total}</span>
+          <span style="font-size:0.78rem;color:var(--text3);display:block;margin-top:2px;">stops visited today</span>
+        </div>
+        ${unvisitedUrl ? `<a href="${unvisitedUrl}" target="_blank" rel="noopener"
+          style="display:inline-flex;align-items:center;gap:10px;background:var(--teal);color:#000;font-size:0.92rem;font-weight:800;padding:13px 24px;border-radius:12px;text-decoration:none;box-shadow:0 4px 18px rgba(0,201,167,0.35);">
+          🗺️ Route: Unvisited Stops (${unvisited.length}) ↗
+        </a>` : ''}
+        ${allStopsUrl ? `<a href="${allStopsUrl}" target="_blank" rel="noopener"
+          style="display:inline-flex;align-items:center;gap:10px;background:var(--surface2);color:var(--text);font-size:0.82rem;font-weight:700;padding:10px 20px;border-radius:10px;text-decoration:none;border:1px solid var(--border2);">
+          🗺️ Route: All Stops (${withAddr.filter(b=>b.fullAddr).length}) ↗
+        </a>` : ''}
+      </div>`;
+  }
+
+  // Stops list
+  if (!businesses.length) { stopsArea.innerHTML = ''; return; }
+
+  let html = `<div style="margin-bottom:10px;font-size:0.7rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);">Your Assigned Stops</div>`;
+
+  const renderStop = (b, idx) => {
+    const typeColor = b.business_type === 'Mechanical' ? 'var(--blue)' : b.business_type === 'Collision' ? 'var(--red)' : 'var(--text3)';
+    const mapsLink = b.fullAddr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(b.fullAddr)}` : null;
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+      <div style="width:26px;height:26px;border-radius:50%;background:${b.visited ? 'var(--teal-dim)' : 'var(--surface2)'};border:2px solid ${b.visited ? 'var(--teal)' : 'var(--border2)'};display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:800;color:${b.visited ? 'var(--teal)' : 'var(--text3)'};flex-shrink:0;">
+        ${b.visited ? '✓' : idx + 1}
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.85rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b.business_name}</div>
+        <div style="font-size:0.7rem;color:var(--text3);">${b.fullAddr || 'No address'} ${b.business_type ? `· <span style="color:${typeColor};font-weight:700;">${b.business_type}</span>` : ''}</div>
+      </div>
+      ${mapsLink ? `<a href="${mapsLink}" target="_blank" rel="noopener" style="font-size:0.72rem;color:var(--teal);text-decoration:none;flex-shrink:0;">📍</a>` : ''}
     </div>`;
+  };
+
+  // Unvisited first, then visited
+  if (unvisited.length) {
+    unvisited.forEach((b, i) => { html += renderStop(b, i); });
+  }
+  if (visited.length) {
+    html += `<div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--teal);padding:10px 0 4px;">Visited Today</div>`;
+    visited.forEach((b, i) => { html += renderStop(b, i); });
+  }
+  if (noAddr.length) {
+    html += `<div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;color:var(--text3);padding:10px 0 4px;">No Address</div>`;
+    noAddr.forEach((b, i) => { html += renderStop(b, i); });
+  }
+  stopsArea.innerHTML = html;
+
+  // Render Leaflet map with pins
+  const leafletDiv = document.getElementById('map-leaflet');
+  leafletDiv.style.display = 'none';
+
+  const toMap = withAddr.filter(b => b.fullAddr || (b.latitude && b.longitude));
+  if (toMap.length) {
+    leafletDiv.style.display = 'block';
+    if (window._leafletMap) { window._leafletMap.remove(); window._leafletMap = null; }
+    const map = L.map('map-leaflet', { zoomControl: true });
+    window._leafletMap = map;
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(map);
+
+    const makeIcon = (visited) => L.divIcon({
+      className: '',
+      html: `<div style="width:20px;height:20px;border-radius:50% 50% 50% 0;background:${visited ? '#888' : '#00c9a7'};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);transform:rotate(-45deg);"></div>`,
+      iconSize: [20,20], iconAnchor: [10,20], popupAnchor: [0,-22]
+    });
+
+    const geocodeAddr = async (addr) => {
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addr)}`, {
+          headers: { 'Accept-Language': 'en-US' }
+        });
+        const d = await r.json();
+        return d.length ? { lat: parseFloat(d[0].lat), lng: parseFloat(d[0].lon) } : null;
+      } catch { return null; }
+    };
+
+    const markers = [];
+    for (const b of toMap) {
+      let coords = null;
+      // Use stored coordinates first — no geocoding needed
+      if (b.latitude && b.longitude) {
+        coords = { lat: b.latitude, lng: b.longitude };
+      } else if (b.fullAddr) {
+        coords = await geocodeAddr(b.fullAddr);
+        await new Promise(r => setTimeout(r, 1100)); // Nominatim 1 req/sec
+      }
+      if (coords) {
+        const m = L.marker([coords.lat, coords.lng], { icon: makeIcon(b.visited) })
+          .bindPopup(`<strong>${b.business_name}</strong><br>${b.fullAddr || ''}${b.visited ? '<br><span style="color:#00c9a7;font-weight:700;">✓ Visited today</span>' : ''}`)
+          .addTo(map);
+        markers.push(m);
+      }
+    }
+
+    if (markers.length) {
+      map.fitBounds(L.featureGroup(markers).getBounds().pad(0.15));
+    } else {
+      map.setView([32.7767, -96.797], 10);
+    }
+  }
 }
 
 // ═══ ALL ENTRIES ═══
@@ -2396,6 +2565,14 @@ async function generateReport(type, zone, count, available) {
 }
 
 // ═══ PDF REPORT GENERATOR ═══
+function formatPhoneInput(el) {
+  const digits = el.value.replace(/\D/g, '').slice(0, 10);
+  if (digits.length === 0) { el.value = ''; return; }
+  if (digits.length <= 3) { el.value = `(${digits}`; return; }
+  if (digits.length <= 6) { el.value = `(${digits.slice(0,3)}) ${digits.slice(3)}`; return; }
+  el.value = `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+}
+
 function toProperCase(str) {
   if (!str) return str;
   return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
@@ -2567,7 +2744,7 @@ async function importEntriesFile(e) {
       visit_contact_name:     row['visit_contact_name'] || row['VisitContactName'] || null,
       visit_contact_position: row['visit_contact_position'] || row['VisitContactPosition'] || null,
       purchase_from_dealer:   row['purchase_from_dealer'] || row['purchase_from_dealse'] || row['PurchaseFromDealer'] || null,
-      notes:                  row['notes'] || row['Notes'] || null,
+      notes:                  row['notes'] || row['Notes'] || row['comment'] || row['Comment'] || row['comments'] || row['Comments'] || null,
       entry_date:             (() => {
         const raw = row['entry_date'] || row['EntryDate'] || row['dateofvisit'] || row['DateOfVisit'] || row['date_of_visit'];
         if (!raw) return null;
@@ -2864,8 +3041,16 @@ function resetUploadZoneBiz() {
 async function renderBusinessDirectory() {
   await ensureSession();
   await loadZones(); await populateZoneDropdown('biz-zone');
-  const { data } = await db.from('businesses').select('*').order('business_name');
-  allBusinesses = data || [];
+  // Paginate — Supabase default limit is 1000
+  let allBizRows = [], page = 0, pageSize = 1000, done = false;
+  while (!done) {
+    const { data, error } = await db.from('businesses').select('*').order('business_name').range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error) { console.error('businesses fetch error:', error); break; }
+    allBizRows = allBizRows.concat(data || []);
+    done = !data || data.length < pageSize;
+    page++;
+  }
+  allBusinesses = allBizRows;
   filterBizDirectory();
 }
 
@@ -3062,34 +3247,45 @@ async function renderAssignPills() {
 
 async function renderBizAssignList() {
   if (!assignTarget) return;
-  const { data: assigned, error: aErr } = await db.from('business_assignments').select('account_number').eq('username', assignTarget);
-  if (aErr) console.error('business_assignments fetch error:', aErr);
+  const { data: assigned } = await db.from('business_assignments').select('account_number').eq('username', assignTarget);
   assignedAccounts = new Set((assigned || []).map(a => a.account_number));
-  const { data: all, error: bErr } = await db.from('businesses').select('*').order('business_name');
-  if (bErr) console.error('businesses fetch error:', bErr);
-  allBusinesses = all || [];
-  // Populate zone dropdown from distinct zone values on businesses
+
+  // Get employee's assigned zones
+  const { data: empZoneRows } = await db.from('user_zones').select('zone_key').eq('username', assignTarget);
+  const empZoneKeys = new Set((empZoneRows || []).map(r => r.zone_key));
+
+  // Populate zone dropdown — only zones the employee is assigned to
   const zSel = document.getElementById('assign-zone-filter');
   const curZone = zSel.value;
-  zSel.innerHTML = '<option value="">All Zones</option>';
-  const distinctZones = [...new Set(allBusinesses.map(b => b.zone).filter(Boolean))].sort();
-  distinctZones.forEach(zv => {
+  zSel.innerHTML = '<option value="">All My Zones</option>';
+  const allDistinctZones = [...new Set(allBusinesses.map(b => b.zone).filter(Boolean))].sort();
+  const empZones = empZoneKeys.size
+    ? allDistinctZones.filter(zv => [...empZoneKeys].some(k => zv.toUpperCase().startsWith(k.toUpperCase())))
+    : allDistinctZones; // if no zones assigned, show all
+  empZones.forEach(zv => {
     const o = document.createElement('option');
     o.value = zv;
     const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
     o.textContent = zObj ? `${zv} — ${zObj.zone_name}` : zv;
     zSel.appendChild(o);
   });
-  if (curZone) zSel.value = curZone;
+  if (curZone && empZones.includes(curZone)) zSel.value = curZone;
+
+  // Store empZoneKeys on window for renderBizAssignListUI to use
+  window._assignTargetZones = empZoneKeys;
   renderBizAssignListUI();
 }
 function renderBizAssignListUI() {
   const search = document.getElementById('biz-search-input').value.toLowerCase();
   const zoneFilter = document.getElementById('assign-zone-filter').value;
+  const empZoneKeys = window._assignTargetZones || new Set();
   const c = document.getElementById('biz-assign-list'); c.innerHTML='';
-  let filtered = allBusinesses;
+  // Restrict to employee's zones unless no zones are assigned
+  let filtered = empZoneKeys.size
+    ? allBusinesses.filter(b => !b.zone || [...empZoneKeys].some(k => (b.zone||'').toUpperCase().startsWith(k.toUpperCase())))
+    : allBusinesses;
   if (zoneFilter) filtered = filtered.filter(b => b.zone === zoneFilter);
-  if (search) filtered = filtered.filter(b => b.business_name.toLowerCase().includes(search) || b.account_number.toLowerCase().includes(search));
+  if (search) filtered = filtered.filter(b => (b.business_name||'').toLowerCase().includes(search) || (b.account_number||'').toLowerCase().includes(search));
   if(!filtered.length) { c.innerHTML='<div style="font-size:0.8rem;color:var(--text3);font-style:italic;padding:8px 0;">No businesses found.</div>'; return; }
   const assignedInView = filtered.filter(b => assignedAccounts.has(b.account_number)).length;
   const totalAssigned = assignedAccounts.size;
