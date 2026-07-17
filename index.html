@@ -2572,16 +2572,15 @@ function formatPhoneInput(el) {
 function normalizeBays(raw) {
   if (!raw) return '';
   const s = String(raw).trim();
-  if (/^(1-3|4-6|7\+)$/.test(s)) return s; // already a code
-  const d = parseInt(s.replace(/[^0-9]/g, ''));
-  if (!isNaN(d)) {
-    if (d <= 3) return '1-3';
-    if (d <= 6) return '4-6';
-    return '7+';
-  }
-  if (s.toLowerCase().includes('more') || s.includes('7')) return '7+';
-  if (s.includes('4') || s.includes('5') || s.includes('6')) return '4-6';
-  if (s.includes('1') || s.includes('2') || s.includes('3')) return '1-3';
+  // Already a valid code
+  if (s === '1-3' || s === '4-6' || s === '7+') return s;
+  const lower = s.toLowerCase();
+  // "7 or more", "7+", "7 or More Bays"
+  if (lower.includes('more') || lower.includes('7+') || /^7/.test(s)) return '7+';
+  // "4 - 6 Bays", "4-6", starts with 4/5/6
+  if (/^[456]/.test(s) || lower.includes('4 ') || lower.includes('4-')) return '4-6';
+  // "1 - 3 Bays", "1-3", starts with 1/2/3
+  if (/^[123]/.test(s) || lower.includes('1 ') || lower.includes('1-')) return '1-3';
   return s;
 }
 
