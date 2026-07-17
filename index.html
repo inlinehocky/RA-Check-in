@@ -1727,19 +1727,25 @@ async function onBizChange() {
     lvBtn.style.display = '';
     const byWho = lastVisit.display_name || lastVisit.username || '';
     lvBtn.textContent = `🕐 Last Visit Responses — ${lastVisit.entry_date}${byWho ? ' · ' + byWho : ''}`;
-    // Autofill from last visit if fields are still empty
-    if (lastVisit.bays) {
-      // Use rAF so the select is visible/rendered before setting value
-      requestAnimationFrame(() => {
-        const baysSel = document.getElementById('bays-select');
-        baysSel.value = lastVisit.bays;
-        if (baysSel.value !== lastVisit.bays) {
-          for (const o of baysSel.options) { if (o.value === lastVisit.bays) { o.selected = true; break; } }
-        }
-      });
-    }
+    // Autofill from last visit
     if (lastVisit.visit_contact_name) document.getElementById('visit-contact-name').value = lastVisit.visit_contact_name;
     if (lastVisit.visit_contact_position) document.getElementById('visit-contact-position').value = lastVisit.visit_contact_position;
+    if (lastVisit.bays) {
+      // Delay to ensure renderQuestions() hasn't reset the form, match by value OR display text
+      setTimeout(() => {
+        const baysSel = document.getElementById('bays-select');
+        const target = String(lastVisit.bays).trim();
+        baysSel.value = target;
+        if (!baysSel.value) {
+          for (const o of baysSel.options) {
+            if (o.value === target || o.textContent.trim() === target || o.textContent.includes(target)) {
+              o.selected = true; break;
+            }
+          }
+        }
+        console.log('[bays] lastVisit.bays=', target, '→ select.value=', baysSel.value);
+      }, 100);
+    }
   } else {
     window._lastVisitData = null;
     lvNone.style.display = '';
