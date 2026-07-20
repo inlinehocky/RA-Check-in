@@ -2594,7 +2594,10 @@ function buildReportPDF(entries, type, zoneName, sentAt) {
   const sentDateStr = new Date(sentAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   const filename = `${type}_${zoneName.replace(/\s+/g,'_')}_${new Date(sentAt).toISOString().slice(0,10)}.pdf`;
   const cards = entries.map(e => {
-    const mapsUrl = e.latitude ? `https://www.google.com/maps?q=${e.latitude},${e.longitude}` : null;
+    const addr = [e.businesses?.address, e.businesses?.city, e.businesses?.state, e.businesses?.zip].filter(Boolean).join(', ');
+    const mapsUrl = e.latitude && e.longitude
+      ? `https://www.google.com/maps?q=${e.latitude},${e.longitude}`
+      : addr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}` : null;
     const contactName = toProperCase(e.businesses?.contact_name || e.visit_contact_name || '—');
     const visitContactName = toProperCase(e.visit_contact_name || '—');
     return `
