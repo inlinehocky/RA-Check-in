@@ -447,6 +447,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </div>
         <button class="btn btn-primary btn-full" id="submit-btn" onclick="submitEntry()">Save Check-In ↗</button>
       </div>
+
     </div>
   </div>
 
@@ -520,9 +521,10 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </select>
           <button class="btn btn-danger" id="btn-revert-date" style="font-size:0.73rem;padding:5px 12px;display:none;" onclick="revertAllOnDate()">↩ Revert All on Date</button>
         </div>
-        <!-- Search + Sort -->
+        <!-- Search + Sort + Visit Date Filter -->
         <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap;">
           <input class="field-input" type="text" id="entries-search" placeholder="Search business, account, contact, notes…" style="flex:1;min-width:180px;margin-bottom:0;font-size:0.82rem;" oninput="applyFiltersAndRender()">
+          <input type="date" class="field-input" id="entries-visit-date" style="margin-bottom:0;font-size:0.82rem;width:auto;" title="Filter by visit date" onchange="applyFiltersAndRender()">
           <select class="field-input" id="entries-sort" style="margin-bottom:0;font-size:0.82rem;width:auto;min-width:180px;" onchange="applyFiltersAndRender()">
             <option value="recent">Most Recent Visit</option>
             <option value="oldest">Oldest Visit First</option>
@@ -2165,6 +2167,7 @@ function entryHTML(e) {
       ${(e.gps_flag && currentUser?.role === 'owner') ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;margin-left:auto;" onclick="openGpsReviewModal('${e.id}')">🔍 Review GPS</button>` : ''}
       ${currentUser?.role === 'owner' ? `<button class="btn btn-outline" style="font-size:0.72rem;padding:4px 10px;" onclick="openEditEntryModal('${e.id}')">✏️ Edit</button>` : ''}
       ${currentUser?.role === 'owner' ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;" onclick="deleteEntry('${e.id}')">🗑 Delete</button>` : ''}
+      ${currentUser?.role === 'owner' && e.account_number ? `<button class="btn btn-danger" style="font-size:0.72rem;padding:4px 10px;" onclick="deactivateEntryBusiness('${e.account_number}','${(e.business||'').replace(/'/g,'')}')">🚫 Deactivate Biz</button>` : ''}
     </div>
   </div>`;
 }
@@ -2261,6 +2264,14 @@ async function applyFiltersAndRender() {
   else if (sentFilter === 'date' && sentDateFilter) {
     list = list.filter(e => e.used_in_report_at &&
       new Date(e.used_in_report_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) === sentDateFilter);
+  }
+
+  // Visit date filter
+  const visitDate = document.getElementById('entries-visit-date')?.value;
+  if (visitDate) {
+    const d = new Date(visitDate + 'T12:00:00');
+    const fmt = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    list = list.filter(e => e.entry_date === fmt);
   }
 
   // Search
@@ -3689,6 +3700,14 @@ async function saveEditEntry() {
   }
   showToast('Entry updated ✓');
   closeEditEntryModal();
+  await renderAllEntries();
+}
+
+async function deactivateEntryBusiness(acct, bizName) {
+  if (!confirm(`Deactivate "${bizName}"?\n\nIt will be removed from all employee dropdowns.`)) return;
+  const { error } = await db.from('businesses').update({ active_ind: 0 }).eq('account_number', acct);
+  if (error) { showToast('Error deactivating business', true); console.error(error); return; }
+  showToast(`"${bizName}" deactivated ✓`);
   await renderAllEntries();
 }
 
