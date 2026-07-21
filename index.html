@@ -1941,7 +1941,7 @@ async function submitEntry() {
     longitude: geo?.longitude || null,
     location_accuracy: geo?.accuracy || null,
     gps_flag: gpsFlag,
-    entry_date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+    entry_date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
     entry_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     answers: answerPayload,
   });
