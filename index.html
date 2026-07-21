@@ -2269,9 +2269,13 @@ async function applyFiltersAndRender() {
   // Visit date filter
   const visitDate = document.getElementById('entries-visit-date')?.value;
   if (visitDate) {
-    const d = new Date(visitDate + 'T12:00:00');
-    const fmt = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    list = list.filter(e => e.entry_date === fmt);
+    const [yr, mo, dy] = visitDate.split('-').map(Number);
+    const d = new Date(yr, mo - 1, dy);
+    const fmtLong    = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); // "Jul 15, 2026"
+    const fmtSlash   = `${mo}/${dy}/${yr}`;   // "7/15/2026"
+    const fmtPadded  = `${String(mo).padStart(2,'0')}/${String(dy).padStart(2,'0')}/${yr}`; // "07/15/2026"
+    const fmtISO     = visitDate; // "2026-07-15"
+    list = list.filter(e => e.entry_date === fmtLong || e.entry_date === fmtSlash || e.entry_date === fmtPadded || e.entry_date === fmtISO);
   }
 
   // Search
