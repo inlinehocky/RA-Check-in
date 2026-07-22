@@ -2488,11 +2488,18 @@ async function renderReportButtons(filteredList) {
     grouped[key].zoneValues.push(zv);
   });
 
+  // Fetch active biz accounts once before loop (await can't be inside forEach)
+  let activeBizAccts;
+  if (allBusinesses.length) {
+    activeBizAccts = new Set(allBusinesses.filter(b => b.active_ind !== 0).map(b => b.account_number));
+  } else {
+    const { data: activeBiz } = await db.from('businesses').select('account_number').eq('active_ind', 1);
+    activeBizAccts = new Set((activeBiz || []).map(b => b.account_number));
+  }
+
   Object.values(grouped).sort((a,b)=>a.zone_name.localeCompare(b.zone_name)).forEach(group => {
     types.forEach(t => {
       const count = reportSettings[t] || (t==='Mechanical'?8:20);
-      // Count unsent entries for all zone values in this group
-      const activeBizAccts = new Set(allBusinesses.filter(b => b.active_ind !== 0).map(b => b.account_number));
       const available = allEntries.filter(e =>
         !e.used_in_report_at &&
         e.business_type === t &&
