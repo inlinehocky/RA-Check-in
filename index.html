@@ -1138,6 +1138,13 @@ const IMG_COLLISION = 'data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUN
 const { createClient } = supabase;
 const db = createClient(SUPA_URL, SUPA_KEY);
 
+// Shared date helper — always MM/DD/YYYY to match stored entry_date format
+function todayMMDDYYYY() {
+  const d = new Date();
+  return String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0') + '/' + d.getFullYear();
+}
+
+
 let currentUser = null;
 let questions = [];      // all questions for current biz type
 let answers = {};
@@ -1941,7 +1948,7 @@ async function submitEntry() {
     longitude: geo?.longitude || null,
     location_accuracy: geo?.accuracy || null,
     gps_flag: gpsFlag,
-    entry_date: new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }),
+    entry_date: todayMMDDYYYY(),
     entry_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     answers: answerPayload,
   });
@@ -1971,7 +1978,7 @@ async function renderMapPane() {
     .filter(b => b && b.active_ind !== 0 && !b.do_not_visit);
 
   // Get today's visited accounts
-  const todayFmt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const todayFmt = todayMMDDYYYY();
   const accts = businesses.map(b => b.account_number);
   let visitedToday = new Set();
   if (accts.length) {
@@ -2238,9 +2245,16 @@ async function dismissReport(reportId) {
 
 async function renderAllEntries() {
   await ensureSession();
-  const { data, error } = await db.from('entries').select('*').order('created_at', { ascending: false });
-  if (error) { console.error('renderAllEntries error:', error); showToast('Error loading entries — check console', true); }
-  allEntries = data || [];
+  // Paginate — Supabase default limit is 1000
+  let allRows = [], page = 0, pageSize = 1000, done = false;
+  while (!done) {
+    const { data, error } = await db.from('entries').select('*').order('created_at', { ascending: false }).range(page * pageSize, (page + 1) * pageSize - 1);
+    if (error) { console.error('renderAllEntries error:', error); showToast('Error loading entries — check console', true); break; }
+    allRows = allRows.concat(data || []);
+    done = !data || data.length < pageSize;
+    page++;
+  }
+  allEntries = allRows;
 
   // Employee filter chips
   const fc = document.getElementById('all-filters');
