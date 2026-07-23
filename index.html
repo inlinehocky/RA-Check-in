@@ -1660,7 +1660,7 @@ async function resetEntryForm() {
   assignedBusinesses.sort((a, b) => a.business_name.localeCompare(b.business_name));
 
   // entry_date stored as "Jun 2, 2026" format
-  const todayFormatted = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const todayFormatted = todayMMDDYYYY();
   const accts = assignedBusinesses.map(b => b.account_number);
   let visitedToday = new Set();
   if (accts.length) {
