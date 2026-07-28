@@ -378,6 +378,7 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
             </div>
           </div>
           <div class="biz-info-row"><strong>📍 Address</strong><span id="biz-info-addr"></span></div>
+          <div class="biz-info-row"><strong>🗂️ Zone</strong><span id="biz-info-zone"></span></div>
           <div class="biz-info-row"><strong>📞 Phone</strong><span id="biz-info-phone"></span></div>
           <div class="biz-info-row" id="biz-info-contact-row"><strong>👤 Contact</strong><span id="biz-info-contact"></span></div>
           <div style="margin-top:10px;">
@@ -1706,6 +1707,7 @@ async function onBizChange() {
   document.getElementById('biz-info-acct').textContent = biz.account_number;
   const addrParts = [biz.address, biz.city, biz.state, biz.zip].filter(Boolean);
   document.getElementById('biz-info-addr').textContent = addrParts.join(', ') || '—';
+  document.getElementById('biz-info-zone').textContent = biz.zone || '—';
   document.getElementById('biz-info-phone').textContent = biz.phone || '—';
   const contactRow = document.getElementById('biz-info-contact-row');
   if (biz.contact_name) { document.getElementById('biz-info-contact').textContent = biz.contact_name; contactRow.style.display = 'flex'; }
