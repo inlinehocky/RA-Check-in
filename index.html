@@ -381,6 +381,10 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <div class="biz-info-row"><strong>🗂️ Zone</strong><span id="biz-info-zone"></span></div>
           <div class="biz-info-row"><strong>📞 Phone</strong><span id="biz-info-phone"></span></div>
           <div class="biz-info-row" id="biz-info-contact-row"><strong>👤 Contact</strong><span id="biz-info-contact"></span></div>
+          <div id="biz-info-photo-wrap" style="display:none;margin-top:8px;">
+            <img id="biz-info-photo" src="" alt="Business photo" onclick="openLightbox(this.src)"
+              style="width:100%;max-height:140px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;display:block;">
+          </div>
           <div style="margin-top:10px;">
             <button class="btn btn-outline" style="font-size:0.78rem;padding:7px 16px;border-color:var(--gold-border);color:var(--gold);gap:6px;display:none;" id="last-visit-btn" onclick="openLastVisitModal()">🕐 Last Visit Responses</button>
             <span id="last-visit-none" style="font-size:0.72rem;color:var(--text3);font-style:italic;display:none;">No previous visits recorded.</span>
@@ -614,6 +618,12 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
               <div class="field-label">Reason <span style="font-weight:400;color:var(--text3);">(visible to owner only)</span></div>
               <input class="field-input" type="text" id="biz-dnv-reason" placeholder="e.g. Out of business, competitor account…" style="margin-bottom:0;">
             </div>
+          </div>
+          <!-- Business photo (shown when editing) -->
+          <div id="biz-edit-photo-wrap" style="display:none;margin-bottom:10px;">
+            <div class="field-label">Business Photo</div>
+            <img id="biz-edit-photo" src="" alt="Business photo" onclick="openLightbox(this.src)"
+              style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;display:block;">
           </div>
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button class="btn btn-primary" onclick="saveBusiness()">Save Business</button>
@@ -1722,6 +1732,14 @@ async function onBizChange() {
     typeBadge.style.border = biz.business_type === 'Mechanical' ? '1px solid rgba(96,165,250,0.3)' : '1px solid rgba(255,92,92,0.2)';
   } else { typeBadge.style.display = 'none'; }
   card.classList.add('visible');
+  // Load business photo
+  const bizPhotoWrap = document.getElementById('biz-info-photo-wrap');
+  const bizPhotoImg  = document.getElementById('biz-info-photo');
+  bizPhotoWrap.style.display = 'none';
+  db.from('business_photos').select('photo_url').eq('account_number', biz.account_number).single()
+    .then(({ data }) => {
+      if (data?.photo_url) { bizPhotoImg.src = data.photo_url; bizPhotoWrap.style.display = 'block'; }
+    });
   // Load questions for this business type
   answers = {};
   await loadQuestions(biz.business_type);
@@ -1873,15 +1891,53 @@ async function getGeoLocation() {
   });
 }
 
+async function compressPhoto(file, maxWidth = 800, quality = 0.75) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxWidth / img.width);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        if (blob) { console.log('[photo] compressed:', Math.round(blob.size/1024)+'KB'); resolve(blob); }
+        else { console.warn('[photo] canvas.toBlob returned null — using original file'); resolve(file); }
+      }, 'image/jpeg', quality);
+    };
+    img.onerror = (e) => { console.warn('[photo] image load error, using original:', e); URL.revokeObjectURL(url); resolve(file); };
+    img.src = url;
+  });
+}
+
 async function uploadPhoto(accountNumber) {
   if (!selectedPhoto) return null;
-  const ext = selectedPhoto.name.split('.').pop() || 'jpg';
-  const path = `${accountNumber}/latest.${ext}`;
-  await db.storage.from('checkin-photos').remove([path]);
-  const { data, error } = await db.storage.from('checkin-photos').upload(path, selectedPhoto, { upsert: true, contentType: selectedPhoto.type });
-  if (error) { console.error('Photo upload error', error); return null; }
+  console.log('[photo] starting upload for account:', accountNumber, 'file:', selectedPhoto.name, selectedPhoto.size);
+  let payload;
+  try {
+    payload = await compressPhoto(selectedPhoto);
+  } catch(e) {
+    console.error('[photo] compression failed, using original:', e);
+    payload = selectedPhoto;
+  }
+  const path = `${accountNumber}/latest.jpg`;
+  console.log('[photo] uploading to path:', path, 'size:', Math.round(payload.size/1024)+'KB');
+  const removeResult = await db.storage.from('checkin-photos').remove([path]);
+  console.log('[photo] remove old result:', removeResult.error || 'ok');
+  const { data, error } = await db.storage.from('checkin-photos').upload(path, payload, { upsert: true, contentType: 'image/jpeg' });
+  if (error) {
+    console.error('[photo] upload error:', error);
+    showToast('Photo upload failed: ' + error.message, true);
+    return null;
+  }
+  console.log('[photo] upload success:', data);
   const { data: urlData } = db.storage.from('checkin-photos').getPublicUrl(path);
-  return urlData?.publicUrl ? urlData.publicUrl + '?t=' + Date.now() : null;
+  const url = urlData?.publicUrl ? urlData.publicUrl + '?t=' + Date.now() : null;
+  console.log('[photo] public url:', url);
+  return url;
 }
 
 // ═══ GPS DISTANCE HELPER ═══
@@ -3001,6 +3057,12 @@ async function saveBusiness() {
   if (zoneVal) payload.zone = zoneVal;
   const { error } = await db.from('businesses').upsert(payload, {onConflict:'account_number'});
   if (error) { showToast('Error saving business'); console.error(error); return; }
+  // If DNV is being set, delete the business photo to save storage space
+  if (document.getElementById('biz-dnv').checked) {
+    const storagePath = `${acct}/latest.jpg`;
+    await db.storage.from('checkin-photos').remove([storagePath]);
+    await db.from('business_photos').delete().eq('account_number', acct);
+  }
   // Hide form and reset state before re-rendering
   document.getElementById('add-biz-form').style.display = 'none';
   editingBizAcct = null;
@@ -3175,6 +3237,12 @@ async function editBusiness(acct) {
   document.getElementById('biz-dnv').checked = dnvChecked;
   document.getElementById('biz-dnv-reason').value = biz.dnv_reason||'';
   document.getElementById('biz-dnv-reason-wrap').style.display = dnvChecked ? 'block' : 'none';
+  // Load business photo in edit form
+  const editPhotoWrap = document.getElementById('biz-edit-photo-wrap');
+  const editPhotoImg  = document.getElementById('biz-edit-photo');
+  editPhotoWrap.style.display = 'none';
+  const { data: bpData } = await db.from('business_photos').select('photo_url').eq('account_number', acct).single();
+  if (bpData?.photo_url) { editPhotoImg.src = bpData.photo_url; editPhotoWrap.style.display = 'block'; }
   document.getElementById('add-biz-form').style.display = 'block';
   document.getElementById('add-biz-form').scrollIntoView({behavior:'smooth'});
 }
