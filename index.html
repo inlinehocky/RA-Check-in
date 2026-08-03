@@ -1511,12 +1511,12 @@ async function detectEmployeeZoneFromDB() {
 }
 
 async function getNextAccountNumber() {
-  // Fetch all account numbers, find highest numeric suffix, increment
-  const { data } = await db.from('businesses').select('account_number');
+  // Fetch all account numbers fresh — avoid any client-side caching
+  const { data } = await db.from('businesses').select('account_number').order('account_number', { ascending: false });
   const nums = (data || []).map(b => {
-    const m = b.account_number.match(/(\d+)$/);
+    const m = (b.account_number || '').match(/(\d+)$/);
     return m ? parseInt(m[1]) : 0;
-  });
+  }).filter(n => !isNaN(n));
   const next = nums.length ? Math.max(...nums) + 1 : 1;
   return String(next).padStart(4, '0');
 }
@@ -3009,6 +3009,7 @@ async function toggleAddBizForm() {
     acctField.value = 'Generating…';
     acctField.readOnly = true;
     badge.style.display = '';
+    await new Promise(r => setTimeout(r, 300)); // brief pause to ensure prior save is committed
     const next = await getNextAccountNumber();
     acctField.value = next;
   }
