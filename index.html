@@ -621,9 +621,12 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </div>
           <!-- Business photo (shown when editing) -->
           <div id="biz-edit-photo-wrap" style="display:none;margin-bottom:10px;">
-            <div class="field-label">Business Photo</div>
+            <div class="field-label" style="display:flex;align-items:center;justify-content:space-between;">
+              Business Photo
+              <button class="btn btn-danger" style="font-size:0.72rem;padding:3px 10px;" onclick="deleteBusinessPhoto()">🗑 Delete Photo</button>
+            </div>
             <img id="biz-edit-photo" src="" alt="Business photo" onclick="openLightbox(this.src)"
-              style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;display:block;">
+              style="width:100%;max-height:180px;object-fit:cover;border-radius:8px;border:1px solid var(--border);cursor:zoom-in;display:block;margin-top:6px;">
           </div>
           <div style="display:flex;gap:8px;margin-top:4px;">
             <button class="btn btn-primary" onclick="saveBusiness()">Save Business</button>
@@ -1550,19 +1553,20 @@ async function saveNewBizFromEntry() {
   const acctNum = await getNextAccountNumber();
   const acct = acctNum;
 
+  const ucNb = s => s ? String(s).trim().toUpperCase() : null;
   const payload = {
     account_number: acct,
-    business_name: name,
-    business_type: type,
-    zone: zoneKey,
-    contact_name: toProperCase(document.getElementById('nb-contact').value.trim()) || null,
-    phone: document.getElementById('nb-phone').value.trim() || null,
-    address: document.getElementById('nb-addr').value.trim() || null,
-    city: document.getElementById('nb-city').value.trim() || null,
-    state: document.getElementById('nb-state').value.trim() || null,
-    zip: document.getElementById('nb-zip').value.trim() || null,
-    latitude: parseFloat(document.getElementById('nb-lat').value) || null,
-    longitude: parseFloat(document.getElementById('nb-lng').value) || null,
+    business_name:  ucNb(name),
+    business_type:  type,
+    zone:           zoneKey,
+    contact_name:   ucNb(document.getElementById('nb-contact').value),
+    phone:          document.getElementById('nb-phone').value.trim() || null,
+    address:        ucNb(document.getElementById('nb-addr').value),
+    city:           ucNb(document.getElementById('nb-city').value),
+    state:          ucNb(document.getElementById('nb-state').value),
+    zip:            ucNb(document.getElementById('nb-zip').value),
+    latitude:       parseFloat(document.getElementById('nb-lat').value) || null,
+    longitude:      parseFloat(document.getElementById('nb-lng').value) || null,
   };
 
   const { error: bizError } = await db.from('businesses').insert(payload);
@@ -2594,7 +2598,7 @@ async function generateReport(type, zone, count, available) {
   }
 
   const { data: pool } = await db.from('entries')
-    .select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone,active_ind)')
+    .select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone,active_ind,latitude,longitude)')
     .is('used_in_report_at', null)
     .eq('business_type', type)
     .in('zone', zone.zoneValues);
@@ -2610,7 +2614,15 @@ async function generateReport(type, zone, count, available) {
   await db.from('entries').update({ used_in_report_at: now }).in('id', ids);
 
   // Build and open PDF immediately — this always works regardless of email setting
-  const { html, filename } = buildReportPDF(shuffled, type, zone.zone_name, now);
+  // Fetch business photos for entries in this report
+  const reportAccts = shuffled.map(e => e.account_number).filter(Boolean);
+  let photoMap = {};
+  if (reportAccts.length) {
+    const { data: photos } = await db.from('business_photos').select('account_number, photo_url').in('account_number', reportAccts);
+    (photos || []).forEach(p => { if (p.photo_url) photoMap[p.account_number] = p.photo_url; });
+  }
+
+  const { html, filename } = buildReportPDF(shuffled, type, zone.zone_name, now, photoMap);
   const printWin = window.open('', '_blank');
   if (printWin) {
     printWin.document.write(html);
@@ -2687,17 +2699,19 @@ function toProperCase(str) {
   return str.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function buildReportPDF(entries, type, zoneName, sentAt) {
+function buildReportPDF(entries, type, zoneName, sentAt, photoMap = {}) {
   const logoSrc = type === 'Mechanical' ? IMG_MECHANICAL : IMG_COLLISION;
   const sentDateStr = new Date(sentAt).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
   const filename = `${type}_${zoneName.replace(/\s+/g,'_')}_${new Date(sentAt).toISOString().slice(0,10)}.pdf`;
   const cards = entries.map(e => {
     const addr = [e.businesses?.address, e.businesses?.city, e.businesses?.state, e.businesses?.zip].filter(Boolean).join(', ');
-    const mapsUrl = e.latitude && e.longitude
-      ? `https://www.google.com/maps?q=${e.latitude},${e.longitude}`
+    const bizLat = e.businesses?.latitude, bizLng = e.businesses?.longitude;
+    const mapsUrl = (bizLat && bizLng)
+      ? `https://www.google.com/maps?q=${bizLat},${bizLng}`
       : addr ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}` : null;
     const contactName = toProperCase(e.businesses?.contact_name || e.visit_contact_name || '—');
     const visitContactName = toProperCase(e.visit_contact_name || '—');
+    const photoUrl = photoMap[e.account_number] || null;
     return `
     <div class="visit-card">
       <div class="biz-header">${e.business}</div>
@@ -2708,6 +2722,7 @@ function buildReportPDF(entries, type, zoneName, sentAt) {
           <div>Business Name: ${e.business}</div>
           <div>Business Contact: ${contactName}</div>
           <div>Business Phone: ${e.businesses?.phone || '—'}</div>
+          ${photoUrl ? `<div style="margin-top:4px;"><a href="${photoUrl}" target="_blank" style="color:#0070f3;font-size:9pt;">📷 View Business Photo</a></div>` : ''}
         </div>
         <div class="col">
           <div class="col-title">Business Address</div>
@@ -3039,17 +3054,18 @@ async function saveBusiness() {
     return sel.value || null;
   })();
 
+  const uc = s => s ? String(s).trim().toUpperCase() : null;
   const payload = {
-    account_number: acct, business_name: name,
-    contact_name: toProperCase(document.getElementById('biz-contact').value.trim())||null,
-    phone: document.getElementById('biz-phone').value.trim()||null,
-    address: document.getElementById('biz-addr').value.trim()||null,
-    city: document.getElementById('biz-city').value.trim()||null,
-    state: document.getElementById('biz-state').value.trim()||null,
-    zip: document.getElementById('biz-zip').value.trim()||null,
-    email: document.getElementById('biz-email').value.trim()||null,
-    business_type: document.getElementById('biz-type').value||null,
-    latitude: parseFloat(document.getElementById('biz-lat').value)||null,
+    account_number: uc(acct), business_name: uc(name),
+    contact_name:   uc(document.getElementById('biz-contact').value),
+    phone:          document.getElementById('biz-phone').value.trim()||null,
+    address:        uc(document.getElementById('biz-addr').value),
+    city:           uc(document.getElementById('biz-city').value),
+    state:          uc(document.getElementById('biz-state').value),
+    zip:            uc(document.getElementById('biz-zip').value),
+    email:          uc(document.getElementById('biz-email').value),
+    business_type:  document.getElementById('biz-type').value||null,
+    latitude:       parseFloat(document.getElementById('biz-lat').value)||null,
     longitude: parseFloat(document.getElementById('biz-lng').value)||null,
     do_not_visit: document.getElementById('biz-dnv').checked,
     dnv_reason: document.getElementById('biz-dnv').checked ? (document.getElementById('biz-dnv-reason').value.trim()||null) : null,
@@ -3247,6 +3263,15 @@ async function editBusiness(acct) {
   document.getElementById('add-biz-form').style.display = 'block';
   document.getElementById('add-biz-form').scrollIntoView({behavior:'smooth'});
 }
+async function deleteBusinessPhoto() {
+  if (!editingBizAcct) return;
+  if (!confirm('Delete this business photo? This cannot be undone.')) return;
+  await db.storage.from('checkin-photos').remove([`${editingBizAcct}/latest.jpg`]);
+  await db.from('business_photos').delete().eq('account_number', editingBizAcct);
+  document.getElementById('biz-edit-photo-wrap').style.display = 'none';
+  showToast('Photo deleted ✓');
+}
+
 async function deleteBusiness(acct) {
   if(!confirm(`Delete business #${acct}?`)) return;
   await db.from('businesses').delete().eq('account_number',acct);
