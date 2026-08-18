@@ -3400,6 +3400,18 @@ async function renderBizAssignList() {
   const { data: assigned } = await db.from('business_assignments').select('account_number').eq('username', assignTarget);
   assignedAccounts = new Set((assigned || []).map(a => a.account_number));
 
+  // Ensure allBusinesses is loaded
+  if (!allBusinesses.length) {
+    let rows = [], page = 0, pageSize = 1000, done = false;
+    while (!done) {
+      const { data: chunk } = await db.from('businesses').select('*').order('business_name').range(page * pageSize, (page + 1) * pageSize - 1);
+      rows = rows.concat(chunk || []);
+      done = !chunk || chunk.length < pageSize;
+      page++;
+    }
+    allBusinesses = rows;
+  }
+
   // Get employee's assigned zones
   const { data: empZoneRows } = await db.from('user_zones').select('zone_key').eq('username', assignTarget);
   const empZoneKeys = new Set((empZoneRows || []).map(r => r.zone_key));
@@ -3408,7 +3420,15 @@ async function renderBizAssignList() {
   const zSel = document.getElementById('assign-zone-filter');
   const curZone = zSel.value;
   zSel.innerHTML = '<option value="">All My Zones</option>';
-  const allDistinctZones = [...new Set(allBusinesses.map(b => b.zone).filter(Boolean))].sort();
+
+  // Get distinct zones from allBusinesses or fetch from DB if not loaded
+  let allDistinctZones;
+  if (allBusinesses.length) {
+    allDistinctZones = [...new Set(allBusinesses.map(b => b.zone).filter(Boolean))].sort();
+  } else {
+    const { data: bzData } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
+    allDistinctZones = [...new Set((bzData||[]).map(b=>b.zone).filter(Boolean))].sort();
+  }
   const empZones = empZoneKeys.size
     ? allDistinctZones.filter(zv => [...empZoneKeys].some(k => zv.toUpperCase().startsWith(k.toUpperCase())))
     : allDistinctZones; // if no zones assigned, show all
