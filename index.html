@@ -789,6 +789,46 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
   </div>
 
   <!-- TAB: Help -->
+  <!-- TAB: PartsNow -->
+  <div class="tab-pane" id="tab-partsnow">
+    <div class="tab-scroll">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="card-title">🔧 PartsNow Follow-Up Tasks</div>
+            <div class="card-sub">Collision shops that answered Yes to a PartsNow question. Ordered by oldest request first.</div>
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:0.78rem;color:var(--text2);cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" id="pn-show-completed" style="width:15px;height:15px;accent-color:var(--teal);" onchange="renderPartsNowTab()">
+            Show Completed
+          </label>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input class="field-input" type="text" id="pn-search" placeholder="Search business name, account#, city, contact…" style="flex:1;margin-bottom:0;font-size:0.82rem;" oninput="filterPartsNowList()">
+          <select class="field-input" id="pn-question-filter" style="margin-bottom:0;font-size:0.82rem;width:auto;min-width:180px;" onchange="filterPartsNowList()">
+            <option value="">All Questions</option>
+            <option value="install">Would like PartsNow installed</option>
+            <option value="train">Needs PartsNow training</option>
+          </select>
+          <select class="field-input" id="pn-sort" style="margin-bottom:0;font-size:0.82rem;width:auto;min-width:160px;" onchange="filterPartsNowList()">
+            <option value="oldest">Oldest First</option>
+            <option value="newest">Newest First</option>
+            <option value="business">Business A–Z</option>
+            <option value="zone">Zone A–Z</option>
+            <option value="days_desc">Most Days Pending</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:var(--text2);cursor:pointer;white-space:nowrap;">
+            <input type="checkbox" id="pn-group-zone" style="width:15px;height:15px;accent-color:var(--teal);" onchange="filterPartsNowList()">
+            Group by Zone
+          </label>
+        </div>
+        <div id="pn-count" style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-bottom:8px;min-height:16px;"></div>
+        </div>
+        <div id="partsnow-list"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
   <div class="tab-pane" id="tab-help">
     <div class="tab-scroll">
 
@@ -1255,7 +1295,7 @@ async function ensureSession() {
 function buildNav() {
   const nav = document.getElementById('nav-tabs'); nav.innerHTML = '';
   const tabs = currentUser.role === 'owner'
-    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones & Regions'],['tab-settings','⚙️ Settings'],['tab-help','❓ Help']]
+    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones & Regions'],['tab-settings','⚙️ Settings'],['tab-partsnow','🔧 PartsNow'],['tab-help','❓ Help']]
     : [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-help','❓ Help']];
   tabs.forEach(([id, label]) => {
     const b = document.createElement('div');
@@ -1295,6 +1335,7 @@ async function showTab(id) {
   if (id === 'tab-questions') { await ensureSession(); await renderQEditor(); }
   if (id === 'tab-zones') { await ensureSession(); await renderZonesTab(); }
   if (id === 'tab-settings') await renderSettingsTab();
+  if (id === 'tab-partsnow') await renderPartsNowTab();
   if (id === 'tab-help') {
     const ownerSection = document.getElementById('help-owner-section');
     if (ownerSection) ownerSection.style.display = currentUser?.role === 'owner' ? '' : 'none';
@@ -3970,6 +4011,246 @@ async function grClearFlagOnly() {
   await renderAllEntries();
 }
 
+// ═══ PARTSNOW TAB ═══
+const PARTSNOW_QUESTIONS = [
+  'Would you like to have PartsNow installed?',
+  'You have PartNow already and need to be trained?'
+];
+
+let _pnTaskId = null;
+let _pnGPS = null;
+
+let _pnAllTasks = [];
+
+async function renderPartsNowTab() {
+  const list = document.getElementById('partsnow-list');
+  list.innerHTML = '<div class="empty-state">Loading…</div>';
+  const showCompleted = document.getElementById('pn-show-completed')?.checked;
+
+  // 1. Ensure tasks exist for all matching entries
+  await syncPartsNowTasks();
+
+  // 2. Fetch tasks
+  let query = db.from('partsnow_tasks')
+    .select(`*, businesses:account_number(business_name, address, city, state, zip, phone, contact_name, zone)`)
+    .order('flagged_at', { ascending: true });
+  if (!showCompleted) query = query.eq('completed', false);
+  const { data: tasks, error } = await query;
+  if (error) { list.innerHTML = '<div class="empty-state">Error loading tasks.</div>'; console.error(error); return; }
+
+  _pnAllTasks = tasks || [];
+  filterPartsNowList();
+}
+
+function filterPartsNowList() {
+  const list = document.getElementById('partsnow-list');
+  const q = (document.getElementById('pn-search')?.value || '').toLowerCase().trim();
+  const qFilter = document.getElementById('pn-question-filter')?.value || '';
+
+  let filtered = _pnAllTasks;
+
+  if (q) {
+    filtered = filtered.filter(t => {
+      const biz = t.businesses || {};
+      return (biz.business_name || '').toLowerCase().includes(q)
+        || (t.account_number || '').toLowerCase().includes(q)
+        || (biz.city || '').toLowerCase().includes(q)
+        || (biz.contact_name || '').toLowerCase().includes(q)
+        || (t.task_notes || '').toLowerCase().includes(q)
+        || (t.completed_by || '').toLowerCase().includes(q);
+    });
+  }
+
+  if (qFilter === 'install') {
+    filtered = filtered.filter(t => t.question.toLowerCase().includes('install'));
+  } else if (qFilter === 'train') {
+    filtered = filtered.filter(t => t.question.toLowerCase().includes('train'));
+  }
+
+  // Sort
+  const sort = document.getElementById('pn-sort')?.value || 'oldest';
+  filtered = [...filtered].sort((a, b) => {
+    switch (sort) {
+      case 'newest':    return new Date(b.flagged_at) - new Date(a.flagged_at);
+      case 'business':  return (a.businesses?.business_name||'').localeCompare(b.businesses?.business_name||'');
+      case 'zone':      return (a.businesses?.zone||'').localeCompare(b.businesses?.zone||'');
+      case 'days_desc': return new Date(a.flagged_at) - new Date(b.flagged_at); // oldest = most pending
+      default:          return new Date(a.flagged_at) - new Date(b.flagged_at); // oldest first
+    }
+  });
+
+  // Count label
+  const countEl = document.getElementById('pn-count');
+  if (countEl) {
+    const open = _pnAllTasks.filter(t => !t.completed).length;
+    countEl.textContent = filtered.length === _pnAllTasks.length
+      ? `${open} open task${open !== 1 ? 's' : ''}`
+      : `${filtered.length} of ${_pnAllTasks.length} tasks`;
+  }
+
+  const groupByZone = document.getElementById('pn-group-zone')?.checked;
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty-state">${q || qFilter ? 'No tasks match your search.' : 'No open PartsNow tasks. All caught up! ✅'}</div>`;
+    return;
+  }
+
+  const taskCardHTML = (t) => {
+    const biz = t.businesses || {};
+    const addr = [biz.address, biz.city, biz.state, biz.zip].filter(Boolean).join(', ');
+    const flagDate = t.flagged_at ? new Date(t.flagged_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+    const daysAgo = t.flagged_at ? Math.floor((Date.now() - new Date(t.flagged_at)) / 86400000) : 0;
+    const urgency = daysAgo > 30 ? 'var(--red)' : daysAgo > 14 ? 'var(--gold)' : 'var(--teal)';
+    if (t.completed) {
+      const compDate = t.completed_at ? new Date(t.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+      const mapsUrl = t.completed_latitude && t.completed_longitude ? `https://www.google.com/maps?q=${t.completed_latitude},${t.completed_longitude}` : null;
+      return `<div style="padding:14px 0;border-bottom:1px solid var(--border);opacity:0.65;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+          <span style="font-size:0.72rem;font-weight:800;padding:2px 8px;border-radius:5px;background:var(--teal-dim);color:var(--teal);">✅ Completed</span>
+          <span style="font-size:0.88rem;font-weight:700;">${biz.business_name || t.account_number}</span>
+          <span style="font-size:0.7rem;color:var(--text3);">#${t.account_number}</span>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text3);margin-bottom:4px;">❓ ${t.question}</div>
+        <div style="font-size:0.75rem;color:var(--text2);margin-bottom:2px;">📋 ${t.task_notes || '—'}</div>
+        <div style="font-size:0.7rem;color:var(--text3);">👤 ${t.completed_by || '—'} · 📅 ${compDate}${mapsUrl ? ` · <a href="${mapsUrl}" target="_blank" style="color:var(--teal);">📍 Location</a>` : ''}</div>
+      </div>`;
+    }
+    return `<div style="padding:14px 0;border-bottom:1px solid var(--border);">
+      <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+            <span style="font-size:0.7rem;font-weight:800;padding:2px 8px;border-radius:5px;background:rgba(255,92,92,0.15);color:var(--red);border:1px solid rgba(255,92,92,0.3);">Open</span>
+            <span style="font-size:0.88rem;font-weight:700;">${biz.business_name || t.account_number}</span>
+            <span style="font-size:0.7rem;color:var(--text3);">#${t.account_number}</span>
+            ${!groupByZone && biz.zone ? `<span style="font-size:0.7rem;color:var(--text3);">· ${biz.zone}</span>` : ''}
+          </div>
+          <div style="font-size:0.78rem;color:var(--gold);font-weight:600;margin-bottom:4px;">❓ ${t.question}</div>
+          ${addr ? `<div style="font-size:0.72rem;color:var(--text3);margin-bottom:2px;">📍 ${addr}</div>` : ''}
+          ${biz.phone ? `<div style="font-size:0.72rem;color:var(--text3);margin-bottom:2px;">📞 ${biz.phone}</div>` : ''}
+          ${biz.contact_name ? `<div style="font-size:0.72rem;color:var(--text3);margin-bottom:4px;">👤 ${biz.contact_name}</div>` : ''}
+          <div style="font-size:0.7rem;color:${urgency};font-weight:700;">Flagged ${flagDate} · ${daysAgo} day${daysAgo !== 1 ? 's' : ''} ago</div>
+        </div>
+        <button class="btn btn-primary" style="font-size:0.78rem;padding:8px 16px;white-space:nowrap;flex-shrink:0;"
+          onclick="openPnCompleteModal(${t.id}, '${(biz.business_name||'').replace(/'/g,"\\'")}', '${t.question.replace(/'/g,"\\'")}')">
+          ✅ Mark Complete
+        </button>
+      </div>
+    </div>`;
+  };
+
+  if (groupByZone) {
+    // Group tasks by zone, sort groups alphabetically
+    const groups = {};
+    filtered.forEach(t => {
+      const z = t.businesses?.zone || '— No Zone —';
+      if (!groups[z]) groups[z] = [];
+      groups[z].push(t);
+    });
+    const sortedZones = Object.keys(groups).sort();
+    list.innerHTML = sortedZones.map(zone => {
+      const count = groups[zone].length;
+      const open = groups[zone].filter(t => !t.completed).length;
+      return `
+        <div style="margin:16px 0 4px;padding:6px 12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border2);display:flex;align-items:center;gap:10px;">
+          <span style="font-size:0.75rem;font-weight:800;color:var(--teal);">📍 ${zone}</span>
+          <span style="font-size:0.7rem;color:var(--text3);">${count} task${count !== 1 ? 's' : ''}${open < count ? ` · ${open} open` : ''}</span>
+        </div>
+        ${groups[zone].map(taskCardHTML).join('')}`;
+    }).join('');
+  } else {
+    list.innerHTML = filtered.map(taskCardHTML).join('');
+  }
+}
+
+async function syncPartsNowTasks() {
+  // Find all Collision entries where any PartsNow question was answered YES
+  // that don't yet have a task record
+  const { data: entries } = await db.from('entries')
+    .select('id, account_number, business, created_at, answers')
+    .eq('business_type', 'Collision')
+    .not('answers', 'is', null);
+
+  if (!entries || !entries.length) return;
+
+  const toInsert = [];
+  for (const e of entries) {
+    const answers = Array.isArray(e.answers) ? e.answers : [];
+    for (const a of answers) {
+      if (!a.answer) continue; // not YES
+      const q = a.question || '';
+      if (!PARTSNOW_QUESTIONS.some(pq => q.toLowerCase().includes('partsnow') || q.toLowerCase().includes('partnow'))) continue;
+      toInsert.push({
+        account_number: e.account_number,
+        entry_id: e.id,
+        question: q,
+        flagged_at: e.created_at
+      });
+    }
+  }
+
+  if (!toInsert.length) return;
+
+  // Upsert — ON CONFLICT (entry_id, question) DO NOTHING
+  await db.from('partsnow_tasks').upsert(toInsert, { onConflict: 'entry_id,question', ignoreDuplicates: true });
+}
+
+function openPnCompleteModal(taskId, bizName, question) {
+  _pnTaskId = taskId;
+  _pnGPS = null;
+  document.getElementById('pn-modal-biz').textContent = bizName;
+  document.getElementById('pn-modal-q').textContent = question;
+  document.getElementById('pn-modal-notes').value = '';
+  document.getElementById('pn-modal-gps-display').value = '';
+  document.getElementById('pn-complete-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closePnModal() {
+  document.getElementById('pn-complete-modal').style.display = 'none';
+  document.body.style.overflow = '';
+  _pnTaskId = null;
+  _pnGPS = null;
+}
+
+async function capturePnGPS() {
+  const display = document.getElementById('pn-modal-gps-display');
+  display.value = 'Acquiring…';
+  try {
+    const geo = await getGeoLocation();
+    if (geo) {
+      _pnGPS = geo;
+      display.value = `${geo.latitude.toFixed(5)}, ${geo.longitude.toFixed(5)} (±${Math.round(geo.accuracy)}m)`;
+    } else {
+      display.value = 'Could not acquire GPS';
+    }
+  } catch {
+    display.value = 'GPS unavailable';
+  }
+}
+
+async function savePnComplete() {
+  if (!_pnTaskId) return;
+  const notes = document.getElementById('pn-modal-notes').value.trim();
+  if (!notes) { showToast('Please describe what was done', true); return; }
+
+  const payload = {
+    completed: true,
+    completed_by: currentUser?.display_name || currentUser?.username || null,
+    completed_at: new Date().toISOString(),
+    task_notes: notes,
+    completed_latitude:  _pnGPS?.latitude  || null,
+    completed_longitude: _pnGPS?.longitude || null,
+    completed_accuracy:  _pnGPS?.accuracy  || null,
+  };
+
+  const { error } = await db.from('partsnow_tasks').update(payload).eq('id', _pnTaskId);
+  if (error) { showToast('Error saving — check console', true); console.error(error); return; }
+
+  showToast('Task marked complete ✓');
+  closePnModal();
+  await renderPartsNowTab();
+}
+
 // ═══ TOAST ═══
 function showToast(msg, isError) {
   const t = document.getElementById('toast');
@@ -4133,6 +4414,30 @@ window.showTab = async function(id) {
 <div id="info-popover">
   <div id="info-popover-title"></div>
   <div id="info-popover-body"></div>
+</div>
+
+
+<!-- PartsNow complete task modal -->
+<div id="pn-complete-modal" style="display:none;position:fixed;inset:0;z-index:9990;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)closePnModal()">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:24px;max-width:480px;width:100%;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="font-size:1rem;font-weight:800;">✅ Mark Task Complete</div>
+      <button onclick="closePnModal()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <div id="pn-modal-biz" style="font-size:0.85rem;font-weight:700;margin-bottom:4px;"></div>
+    <div id="pn-modal-q" style="font-size:0.78rem;color:var(--text3);margin-bottom:16px;font-style:italic;"></div>
+    <div class="field-label">What was done? *</div>
+    <textarea class="field-input" id="pn-modal-notes" placeholder="Describe the action taken (e.g. PartsNow installed and configured)…" rows="3" style="margin-bottom:12px;"></textarea>
+    <div class="field-label">GPS Location <span style="font-weight:400;color:var(--text3);">(optional — captures current location)</span></div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;">
+      <input class="field-input" type="text" id="pn-modal-gps-display" placeholder="Not captured" readonly style="flex:1;margin-bottom:0;font-size:0.78rem;background:var(--surface2);">
+      <button class="btn btn-outline" style="white-space:nowrap;font-size:0.78rem;padding:6px 12px;" onclick="capturePnGPS()">📍 Capture GPS</button>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="savePnComplete()">✅ Mark Complete</button>
+      <button class="btn btn-outline" onclick="closePnModal()">Cancel</button>
+    </div>
+  </div>
 </div>
 
 </body>
