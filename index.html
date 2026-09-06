@@ -2035,7 +2035,7 @@ async function submitEntry() {
   }
 
   const answerPayload = questions.map((q, i) => ({ question: q.question, answer: !!answers[i] }));
-  const { error } = await db.from('entries').insert({
+  const { data: savedEntry, error } = await db.from('entries').insert({
     username: currentUser.username,
     display_name: currentUser.display_name || currentUser.username,
     account_number: acct,
@@ -2054,13 +2054,28 @@ async function submitEntry() {
     entry_date: todayMMDDYYYY(),
     entry_time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
     answers: answerPayload,
-  });
+  }).select();
 
   btn.disabled = false; btn.textContent = 'Save Check-In ↗';
   if (error) { showToast('Error saving — try again'); console.error(error); return; }
   showToast('Entry saved! ✓');
   await resetEntryForm();
-  await loadAssignedBusinesses(); // refresh dropdown so today's visits show checkmarks
+  await loadAssignedBusinesses();
+  // If any PartsNow question was answered YES, create task records immediately
+  const pnAnswers = (answerPayload || []).filter(a => a.answer &&
+    (PARTSNOW_QUESTIONS.some(pq => (a.question||'').toLowerCase().includes('partsnow') || (a.question||'').toLowerCase().includes('partnow'))));
+  if (pnAnswers.length && savedEntry?.[0]?.id) {
+    const entry = savedEntry[0];
+    const toInsert = pnAnswers.map(a => ({
+      account_number: entry.account_number,
+      entry_id: entry.id,
+      question: a.question,
+      flagged_at: entry.created_at || new Date().toISOString()
+    }));
+    const { error: pnErr } = await db.from('partsnow_tasks').upsert(toInsert, { onConflict: 'entry_id,question', ignoreDuplicates: true });
+    if (pnErr) console.error('PartsNow task sync error:', pnErr);
+    else console.log('[PartsNow] Created', toInsert.length, 'task(s)');
+  }
 }
 
 // ═══ MAP ═══
