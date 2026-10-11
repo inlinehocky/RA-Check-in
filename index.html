@@ -823,15 +823,77 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </label>
         </div>
         <div id="pn-count" style="font-size:0.72rem;color:var(--text3);font-style:italic;margin-bottom:8px;min-height:16px;"></div>
-        </div>
         <div id="partsnow-list"><div class="empty-state">Loading…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Zone Optimizer -->
+  <div class="tab-pane" id="tab-zone-optimizer">
+    <div class="tab-scroll" style="padding-top:0;">
+      <!-- Settings card -->
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div class="card-title">🗂️ Zone Optimizer</div>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">
+          <div style="flex:1;min-width:160px;">
+            <div class="field-label">Businesses per Zone</div>
+            <input class="field-input" type="number" id="zo-per-zone" value="15" min="3" max="60" style="margin-bottom:0;">
+          </div>
+          <div style="flex:1;min-width:160px;">
+            <div class="field-label">Zone Name Prefix</div>
+            <input class="field-input" type="text" id="zo-prefix" value="ZONE" placeholder="e.g. DAL, ZONE, AREA" style="margin-bottom:0;">
+          </div>
+          <div style="flex:1;min-width:160px;">
+            <div class="field-label">Business Type</div>
+            <select class="field-input" id="zo-biz-type" style="margin-bottom:0;">
+              <option value="">All Types</option>
+              <option value="Collision">Collision</option>
+              <option value="Mechanical">Mechanical</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" style="padding:10px 24px;white-space:nowrap;" onclick="runZoneOptimizer()">⚡ Generate Zones</button>
+        </div>
+      </div>
+      <!-- Status / results -->
+      <div id="zo-status" class="card" style="display:none;margin-bottom:16px;"></div>
+      <!-- Map preview -->
+      <div id="zo-map-wrap" style="display:none;margin-bottom:16px;">
+        <div style="height:380px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+          <div id="zo-map" style="height:100%;width:100%;"></div>
+        </div>
+      </div>
+      <!-- Proposed assignments table -->
+      <div id="zo-results" class="card" style="display:none;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+          <div>
+            <div class="card-title" style="margin-bottom:2px;">Proposed Zone Assignments</div>
+            <div class="card-sub" id="zo-summary"></div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline" onclick="resetZoneOptimizer()">✖ Discard</button>
+            <button class="btn btn-primary" onclick="applyZoneAssignments()">✅ Apply to All Businesses</button>
+          </div>
+        </div>
+        <div id="zo-zone-list"></div>
+      </div>
+      <!-- Snapshot history -->
+      <div class="card" id="zo-history-card">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div>
+            <div class="card-title" style="margin-bottom:2px;">↩️ Zone History &amp; Restore</div>
+            <div class="card-sub">Previous zone assignments saved before each optimizer run. Click Restore to roll back.</div>
+          </div>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:5px 12px;" onclick="loadZoneSnapshots()">🔄 Refresh</button>
+        </div>
+        <div id="zo-history-list"><div class="empty-state" style="padding:20px 0;">Loading history…</div></div>
       </div>
     </div>
   </div>
 
   <div class="tab-pane" id="tab-help">
     <div class="tab-scroll">
-
       <div class="card">
         <div class="card-head"><div><div class="card-title">📖 RA Parts Solutions — Help Guide</div>
           <div class="card-sub">How to use the field sales visit tracking app.</div></div></div>
@@ -1295,7 +1357,7 @@ async function ensureSession() {
 function buildNav() {
   const nav = document.getElementById('nav-tabs'); nav.innerHTML = '';
   const tabs = currentUser.role === 'owner'
-    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones & Regions'],['tab-settings','⚙️ Settings'],['tab-partsnow','🔧 PartsNow'],['tab-help','❓ Help']]
+    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones & Regions'],['tab-settings','⚙️ Settings'],['tab-partsnow','🔧 PartsNow'],['tab-zone-optimizer','🗂️ Zone Optimizer'],['tab-help','❓ Help']]
     : [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-help','❓ Help']];
   tabs.forEach(([id, label]) => {
     const b = document.createElement('div');
@@ -1336,6 +1398,7 @@ async function showTab(id) {
   if (id === 'tab-zones') { await ensureSession(); await renderZonesTab(); }
   if (id === 'tab-settings') await renderSettingsTab();
   if (id === 'tab-partsnow') await renderPartsNowTab();
+  if (id === 'tab-zone-optimizer') await renderZoneOptimizerTab();
   if (id === 'tab-help') {
     const ownerSection = document.getElementById('help-owner-section');
     if (ownerSection) ownerSection.style.display = currentUser?.role === 'owner' ? '' : 'none';
@@ -2209,6 +2272,7 @@ async function renderMapPane() {
     const map = L.map('map-leaflet', { zoomControl: true });
     window._leafletMap = map;
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      subdomains: ['a','b','c'],
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       maxZoom: 19
     }).addTo(map);
@@ -4026,6 +4090,359 @@ async function grClearFlagOnly() {
   await renderAllEntries();
 }
 
+// ═══ ZONE OPTIMIZER ═══
+let _zoProposed = [];   // [{account_number, business_name, lat, lng, zone, origZone}]
+let _zoMap = null;
+let _zoLayerGroup = null;
+
+// Palette for up to 20 zones
+const ZO_COLORS = [
+  '#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6',
+  '#1abc9c','#e67e22','#e91e63','#00bcd4','#8bc34a',
+  '#ff5722','#607d8b','#673ab7','#ff9800','#009688',
+  '#f44336','#2196f3','#4caf50','#ffeb3b','#795548'
+];
+
+async function renderZoneOptimizerTab() {
+  resetZoneOptimizer(true);
+  await loadZoneSnapshots();
+}
+
+function resetZoneOptimizer(silent) {
+  _zoProposed = [];
+  document.getElementById('zo-status').style.display = 'none';
+  document.getElementById('zo-map-wrap').style.display = 'none';
+  document.getElementById('zo-results').style.display = 'none';
+  if (_zoMap) { _zoMap.remove(); _zoMap = null; _zoLayerGroup = null; }
+  if (!silent) showToast('Zone proposal discarded');
+}
+
+async function runZoneOptimizer() {
+  const perZone = parseInt(document.getElementById('zo-per-zone').value) || 15;
+  const prefix  = (document.getElementById('zo-prefix').value || 'ZONE').trim().toUpperCase();
+  const bizType = document.getElementById('zo-biz-type').value;
+
+  const statusEl = document.getElementById('zo-status');
+  statusEl.style.display = 'block';
+  statusEl.innerHTML = '<div style="color:var(--text2);font-size:0.85rem;">⏳ Loading businesses…</div>';
+  document.getElementById('zo-map-wrap').style.display = 'none';
+  document.getElementById('zo-results').style.display = 'none';
+  if (_zoMap) { _zoMap.remove(); _zoMap = null; }
+
+  // Fetch all active, non-DNV businesses with coords
+  let query = db.from('businesses')
+    .select('account_number, business_name, address, city, state, zone, latitude, longitude, business_type')
+    .eq('active_ind', 1)
+    .eq('do_not_visit', false)
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null);
+  if (bizType) query = query.eq('business_type', bizType);
+
+  const { data: bizList, error } = await query;
+  if (error || !bizList?.length) {
+    statusEl.innerHTML = `<div style="color:var(--red);font-size:0.85rem;">❌ ${error?.message || 'No businesses with coordinates found.'}</div>`;
+    return;
+  }
+
+  const total = bizList.length;
+  const numZones = Math.max(1, Math.ceil(total / perZone));
+  statusEl.innerHTML = `<div style="color:var(--text2);font-size:0.85rem;">🔢 ${total} businesses → ${numZones} zones (~${perZone} each). Running optimizer…</div>`;
+
+  // K-means clustering on lat/lng
+  const points = bizList.map(b => ({ lat: parseFloat(b.latitude), lng: parseFloat(b.longitude), biz: b }));
+  const clusters = kMeansClusters(points, numZones, 60);
+
+  // Sort clusters north→south by centroid lat, assign names
+  clusters.sort((a, b) => b.centroidLat - a.centroidLat);
+  _zoProposed = [];
+  clusters.forEach((cl, i) => {
+    const zoneName = `${prefix}${String(i + 1).padStart(2, '0')}`;
+    cl.points.forEach(p => {
+      _zoProposed.push({
+        account_number: p.biz.account_number,
+        business_name:  p.biz.business_name,
+        city:           p.biz.city,
+        state:          p.biz.state,
+        lat:            p.lat,
+        lng:            p.lng,
+        zone:           zoneName,
+        origZone:       p.biz.zone || '',
+        clusterIdx:     i
+      });
+    });
+  });
+
+  statusEl.innerHTML = `<div style="color:var(--teal);font-size:0.85rem;font-weight:700;">✓ ${numZones} zones generated from ${total} businesses. Review below — adjust zone assignments if needed, then click Apply.</div>`;
+
+  renderZoMap();
+  renderZoResults(prefix, numZones, total);
+}
+
+// ── K-Means (Euclidean on lat/lng — fine for metro-scale areas) ──
+function kMeansClusters(points, k, maxIter) {
+  // Seed centroids by spreading evenly across longitude range
+  const sorted = [...points].sort((a, b) => a.lng - b.lng);
+  let centroids = Array.from({ length: k }, (_, i) => {
+    const p = sorted[Math.floor(i * sorted.length / k)];
+    return { lat: p.lat, lng: p.lng };
+  });
+
+  let assignments = new Array(points.length).fill(0);
+  for (let iter = 0; iter < maxIter; iter++) {
+    let changed = false;
+    // Assign each point to nearest centroid
+    points.forEach((p, pi) => {
+      let best = 0, bestDist = Infinity;
+      centroids.forEach((c, ci) => {
+        const d = (p.lat - c.lat) ** 2 + (p.lng - c.lng) ** 2;
+        if (d < bestDist) { bestDist = d; best = ci; }
+      });
+      if (assignments[pi] !== best) { assignments[pi] = best; changed = true; }
+    });
+    if (!changed) break;
+    // Recompute centroids
+    centroids = centroids.map((_, ci) => {
+      const members = points.filter((_, pi) => assignments[pi] === ci);
+      if (!members.length) return centroids[ci];
+      return {
+        lat: members.reduce((s, p) => s + p.lat, 0) / members.length,
+        lng: members.reduce((s, p) => s + p.lng, 0) / members.length
+      };
+    });
+  }
+  // Build cluster objects
+  return centroids.map((c, ci) => ({
+    centroidLat: c.lat, centroidLng: c.lng,
+    points: points.filter((_, pi) => assignments[pi] === ci)
+  }));
+}
+
+function renderZoMap() {
+  document.getElementById('zo-map-wrap').style.display = 'block';
+  if (_zoMap) { _zoMap.remove(); _zoMap = null; }
+  setTimeout(() => {
+    _zoMap = L.map('zo-map', { preferCanvas: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      subdomains: ['a','b','c'],
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19
+    }).addTo(_zoMap);
+    _zoLayerGroup = L.layerGroup().addTo(_zoMap);
+    refreshZoMapPins();
+  }, 80);
+}
+
+function refreshZoMapPins() {
+  if (!_zoMap || !_zoLayerGroup) return;
+  _zoLayerGroup.clearLayers();
+  const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
+  _zoProposed.forEach(b => {
+    const ci = zoneNames.indexOf(b.zone);
+    const color = ZO_COLORS[ci % ZO_COLORS.length];
+    const marker = L.circleMarker([b.lat, b.lng], {
+      radius: 7, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.88
+    }).bindPopup(`<b>${b.business_name}</b><br>${b.zone}<br>${b.city || ''}`);
+    _zoLayerGroup.addLayer(marker);
+  });
+  const coords = _zoProposed.map(b => [b.lat, b.lng]);
+  if (coords.length) _zoMap.fitBounds(coords, { padding: [24, 24] });
+}
+
+function renderZoResults(prefix, numZones, total) {
+  document.getElementById('zo-results').style.display = 'block';
+  document.getElementById('zo-summary').textContent =
+    `${total} businesses across ${numZones} zones. Use the dropdowns to move individual businesses between zones, then click Apply.`;
+
+  const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
+  const zoneOpts  = zoneNames.map(z => `<option value="${z}">${z}</option>`).join('');
+
+  const byZone = {};
+  zoneNames.forEach(z => { byZone[z] = _zoProposed.filter(b => b.zone === z); });
+
+  document.getElementById('zo-zone-list').innerHTML = zoneNames.map((z, zi) => {
+    const members = byZone[z];
+    const color = ZO_COLORS[zi % ZO_COLORS.length];
+    const changed = members.filter(b => b.zone !== b.origZone).length;
+    return `
+      <div style="margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+          <span style="font-size:0.88rem;font-weight:800;">${z}</span>
+          <span style="font-size:0.72rem;color:var(--text3);">${members.length} businesses${changed ? ` · ${changed} moved` : ''}</span>
+        </div>
+        <div style="display:grid;gap:4px;">
+          ${members.map(b => `
+            <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--surface2);border-radius:7px;flex-wrap:wrap;">
+              <span style="flex:1;min-width:120px;font-size:0.8rem;font-weight:600;">${b.business_name}</span>
+              <span style="font-size:0.72rem;color:var(--text3);min-width:80px;">${b.city||''} ${b.state||''}</span>
+              ${b.origZone && b.origZone !== b.zone
+                ? `<span style="font-size:0.68rem;color:var(--gold);white-space:nowrap;">was ${b.origZone}</span>`
+                : ''}
+              <select style="font-size:0.75rem;padding:3px 6px;border-radius:5px;border:1px solid var(--border2);background:var(--surface);color:var(--text);cursor:pointer;"
+                onchange="moveZoBiz('${b.account_number}', this.value)">
+                ${zoneOpts.replace(`value="${b.zone}"`, `value="${b.zone}" selected`)}
+              </select>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function moveZoBiz(acct, newZone) {
+  const biz = _zoProposed.find(b => b.account_number === acct);
+  if (biz) biz.zone = newZone;
+  refreshZoMapPins();
+  // Refresh counts without full re-render
+  const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
+  zoneNames.forEach((z, zi) => {
+    const members = _zoProposed.filter(b => b.zone === z);
+    // update headers - simpler to just re-render results
+  });
+  // Re-render the list to update counts (keeps selects in sync)
+  const prefix = document.getElementById('zo-prefix').value.trim().toUpperCase();
+  renderZoResults(prefix, zoneNames.length, _zoProposed.length);
+}
+
+async function applyZoneAssignments() {
+  if (!_zoProposed.length) return;
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Saving snapshot…';
+
+  // 1. Snapshot current zone assignments BEFORE overwriting
+  const accts = _zoProposed.map(b => b.account_number);
+  const { data: current } = await db.from('businesses')
+    .select('account_number, business_name, zone')
+    .in('account_number', accts);
+
+  if (current?.length) {
+    const label = `Before optimizer run · ${new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })}`;
+    const { error: snapErr } = await db.from('zone_snapshots').insert({
+      created_by: currentUser?.display_name || currentUser?.username || 'owner',
+      label,
+      snapshot: current.map(b => ({ account_number: b.account_number, business_name: b.business_name, zone: b.zone || '' }))
+    });
+    if (snapErr) console.error('Snapshot error:', snapErr);
+  }
+
+  // 2. Apply new zone assignments in batches
+  btn.textContent = 'Applying…';
+  const updates = _zoProposed.map(b => ({ account_number: b.account_number, zone: b.zone }));
+  let failed = 0;
+  for (const u of updates) {
+    const { error } = await db.from('businesses').update({ zone: u.zone }).eq('account_number', u.account_number);
+    if (error) { console.error(error); failed++; }
+  }
+
+  btn.disabled = false; btn.textContent = '✅ Apply to All Businesses';
+  if (failed) {
+    showToast(`Applied with ${failed} error(s) — check console`, true);
+  } else {
+    showToast(`✓ ${updates.length} businesses updated`);
+    document.getElementById('zo-status').innerHTML =
+      `<div style="color:var(--teal);font-size:0.85rem;font-weight:700;">✅ Zone assignments saved for ${updates.length} businesses. A snapshot was created so you can restore if needed.</div>`;
+    allBusinesses = [];
+    await loadZoneSnapshots();
+  }
+}
+
+async function loadZoneSnapshots() {
+  const listEl = document.getElementById('zo-history-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="color:var(--text3);font-size:0.82rem;">Loading…</div>';
+
+  const { data: snaps, error } = await db.from('zone_snapshots')
+    .select('id, created_at, created_by, label, snapshot')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error) { listEl.innerHTML = '<div style="color:var(--red);font-size:0.82rem;">Error loading history.</div>'; return; }
+  if (!snaps?.length) {
+    listEl.innerHTML = '<div class="empty-state" style="padding:16px 0;">No snapshots yet. One is saved automatically each time you apply a zone plan.</div>';
+    return;
+  }
+
+  listEl.innerHTML = snaps.map(s => {
+    const d = new Date(s.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const count = Array.isArray(s.snapshot) ? s.snapshot.length : '?';
+    const zones = Array.isArray(s.snapshot) ? [...new Set(s.snapshot.map(b => b.zone).filter(Boolean))].sort() : [];
+    return `
+      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;">
+          <div style="font-size:0.82rem;font-weight:700;margin-bottom:2px;">${s.label}</div>
+          <div style="font-size:0.7rem;color:var(--text3);">📅 ${d} · 👤 ${s.created_by} · 🏢 ${count} businesses</div>
+          ${zones.length ? `<div style="font-size:0.68rem;color:var(--text3);margin-top:2px;">Zones: ${zones.join(', ')}</div>` : ''}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:5px 12px;" onclick="previewSnapshot(${s.id})">👁 Preview</button>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:5px 12px;color:var(--red);border-color:var(--red);" onclick="restoreSnapshot(${s.id}, '${s.label.replace(/'/g,"\\'")}')">↩️ Restore</button>
+          <button class="btn btn-outline" style="font-size:0.75rem;padding:5px 10px;color:var(--text3);" onclick="deleteSnapshot(${s.id}, this)">🗑</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function previewSnapshot(snapId) {
+  const { data, error } = await db.from('zone_snapshots').select('label, snapshot').eq('id', snapId).single();
+  if (error || !data) { showToast('Could not load snapshot', true); return; }
+  const snap = Array.isArray(data.snapshot) ? data.snapshot : [];
+  const zones = [...new Set(snap.map(b => b.zone).filter(Boolean))].sort();
+  const byZone = {};
+  zones.forEach(z => { byZone[z] = snap.filter(b => b.zone === z); });
+  const html = zones.map(z =>
+    `<b>${z}</b> (${byZone[z].length}): ${byZone[z].map(b => b.business_name || b.account_number).join(', ')}`
+  ).join('<br><br>');
+  // Show in a simple modal via zo-preview-modal
+  document.getElementById('zo-preview-label').textContent = data.label;
+  document.getElementById('zo-preview-body').innerHTML = html || 'No data';
+  document.getElementById('zo-preview-modal').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeZoPreview() {
+  document.getElementById('zo-preview-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+async function restoreSnapshot(snapId, label) {
+  if (!confirm(`Restore zone assignments from:\n"${label}"?\n\nThis will overwrite current zone assignments for all businesses in this snapshot. A new snapshot of the current state will be saved first.`)) return;
+
+  const { data, error } = await db.from('zone_snapshots').select('snapshot').eq('id', snapId).single();
+  if (error || !data?.snapshot) { showToast('Could not load snapshot', true); return; }
+  const snap = Array.isArray(data.snapshot) ? data.snapshot : [];
+  if (!snap.length) { showToast('Snapshot is empty', true); return; }
+
+  // Save current state as snapshot before restoring
+  const accts = snap.map(b => b.account_number);
+  const { data: current } = await db.from('businesses').select('account_number, business_name, zone').in('account_number', accts);
+  if (current?.length) {
+    await db.from('zone_snapshots').insert({
+      created_by: currentUser?.display_name || currentUser?.username || 'owner',
+      label: `Before restore · ${new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric', hour:'2-digit', minute:'2-digit' })}`,
+      snapshot: current.map(b => ({ account_number: b.account_number, business_name: b.business_name, zone: b.zone || '' }))
+    });
+  }
+
+  // Apply restored zones
+  let failed = 0;
+  for (const b of snap) {
+    const { error: upErr } = await db.from('businesses').update({ zone: b.zone || null }).eq('account_number', b.account_number);
+    if (upErr) { console.error(upErr); failed++; }
+  }
+
+  allBusinesses = [];
+  if (failed) showToast(`Restored with ${failed} error(s)`, true);
+  else showToast(`✓ ${snap.length} businesses restored to "${label}"`);
+  await loadZoneSnapshots();
+}
+
+async function deleteSnapshot(snapId, btn) {
+  if (!confirm('Delete this snapshot permanently?')) return;
+  btn.disabled = true;
+  const { error } = await db.from('zone_snapshots').delete().eq('id', snapId);
+  if (error) { showToast('Delete failed', true); btn.disabled = false; return; }
+  await loadZoneSnapshots();
+}
+
 // ═══ PARTSNOW TAB ═══
 const PARTSNOW_QUESTIONS = [
   'Would you like to have PartsNow installed?',
@@ -4455,5 +4872,17 @@ window.showTab = async function(id) {
   </div>
 </div>
 
+<!-- Zone Optimizer snapshot preview modal -->
+<div id="zo-preview-modal" style="display:none;position:fixed;inset:0;z-index:9990;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,0.7);backdrop-filter:blur(4px);" onclick="if(event.target===this)closeZoPreview()">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:24px;max-width:560px;width:100%;max-height:80vh;display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <div style="font-size:0.95rem;font-weight:800;">👁 Snapshot Preview</div>
+      <button onclick="closeZoPreview()" style="background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;">✕</button>
+    </div>
+    <div id="zo-preview-label" style="font-size:0.75rem;color:var(--text3);margin-bottom:16px;"></div>
+    <div id="zo-preview-body" style="font-size:0.78rem;line-height:1.7;overflow-y:auto;flex:1;color:var(--text2);"></div>
+    <button class="btn btn-outline" style="margin-top:16px;" onclick="closeZoPreview()">Close</button>
+  </div>
+</div>
 </body>
 </html>
