@@ -4375,13 +4375,30 @@ async function applyZoneAssignments() {
     if (error) { console.error(error); failed++; }
   }
 
+  // 3. Update zone on unsent entries to match the new business zone
+  btn.textContent = 'Updating entries…';
+  let entriesUpdated = 0, entriesFailed = 0;
+  for (const u of updates) {
+    const { error, count } = await db.from('entries')
+      .update({ zone: u.zone })
+      .eq('account_number', u.account_number)
+      .is('used_in_report_at', null);
+    if (error) { console.error('Entry zone update error:', error); entriesFailed++; }
+    else if (count) entriesUpdated += count;
+  }
+
   btn.disabled = false; btn.textContent = '✅ Apply to All Businesses';
   if (failed) {
     showToast(`Applied with ${failed} error(s) — check console`, true);
   } else {
-    showToast(`✓ ${updates.length} businesses updated`);
+    const entryNote = entriesFailed
+      ? ` (${entriesFailed} entry update errors)`
+      : entriesUpdated
+        ? ` · ${entriesUpdated} unsent entries re-zoned`
+        : ' · no unsent entries to update';
+    showToast(`✓ ${updates.length} businesses updated${entryNote}`);
     document.getElementById('zo-status').innerHTML =
-      `<div style="color:var(--teal);font-size:0.85rem;font-weight:700;">✅ Zone assignments saved for ${updates.length} businesses. A snapshot was created so you can restore if needed.</div>`;
+      `<div style="color:var(--teal);font-size:0.85rem;font-weight:700;">✅ Zone assignments saved for ${updates.length} businesses${entryNote}. A snapshot was created so you can restore if needed.</div>`;
     allBusinesses = [];
     await loadZoneSnapshots();
   }
@@ -4464,16 +4481,33 @@ async function restoreSnapshot(snapId, label) {
     });
   }
 
-  // Apply restored zones
+  // Apply restored zones to businesses
   let failed = 0;
   for (const b of snap) {
     const { error: upErr } = await db.from('businesses').update({ zone: b.zone || null }).eq('account_number', b.account_number);
     if (upErr) { console.error(upErr); failed++; }
   }
 
+  // Re-zone unsent entries to match restored business zones
+  let entriesUpdated = 0, entriesFailed = 0;
+  for (const b of snap) {
+    if (!b.zone) continue;
+    const { error: entErr, count } = await db.from('entries')
+      .update({ zone: b.zone })
+      .eq('account_number', b.account_number)
+      .is('used_in_report_at', null);
+    if (entErr) { console.error(entErr); entriesFailed++; }
+    else if (count) entriesUpdated += count;
+  }
+
   allBusinesses = [];
-  if (failed) showToast(`Restored with ${failed} error(s)`, true);
-  else showToast(`✓ ${snap.length} businesses restored to "${label}"`);
+  const entryNote = entriesFailed
+    ? ` (${entriesFailed} entry errors)`
+    : entriesUpdated
+      ? ` · ${entriesUpdated} unsent entries re-zoned`
+      : '';
+  if (failed) showToast(`Restored with ${failed} error(s)${entryNote}`, true);
+  else showToast(`✓ ${snap.length} businesses restored to "${label}"${entryNote}`);
   await loadZoneSnapshots();
 }
 
