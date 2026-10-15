@@ -4148,11 +4148,11 @@ async function runZoneOptimizer() {
 
   const total = bizList.length;
   const numZones = Math.max(1, Math.ceil(total / perZone));
-  statusEl.innerHTML = `<div style="color:var(--text2);font-size:0.85rem;">🔢 ${total} businesses → ${numZones} zones (~${perZone} each). Running optimizer…</div>`;
+  statusEl.innerHTML = `<div style="color:var(--text2);font-size:0.85rem;">🔢 ${total} businesses → ${numZones} zones (max ${perZone} each). Running optimizer…</div>`;
 
-  // K-means clustering on lat/lng
+  // Capacity-constrained k-means clustering on lat/lng
   const points = bizList.map(b => ({ lat: parseFloat(b.latitude), lng: parseFloat(b.longitude), biz: b }));
-  const clusters = kMeansClusters(points, numZones, 60);
+  const clusters = kMeansClusters(points, numZones, perZone, 60);
 
   // Sort clusters north→south by centroid lat, assign names
   clusters.sort((a, b) => b.centroidLat - a.centroidLat);
@@ -4180,8 +4180,11 @@ async function runZoneOptimizer() {
   renderZoResults(prefix, numZones, total);
 }
 
-// ── K-Means (Euclidean on lat/lng — fine for metro-scale areas) ──
-function kMeansClusters(points, k, maxIter) {
+// ── Capacity-Constrained K-Means (Euclidean on lat/lng — fine for metro-scale areas) ──
+// perZone is a HARD MAX — no cluster will ever exceed it.
+function kMeansClusters(points, k, perZone, maxIter) {
+  const cap = perZone; // hard maximum per zone
+
   // Seed centroids by spreading evenly across longitude range
   const sorted = [...points].sort((a, b) => a.lng - b.lng);
   let centroids = Array.from({ length: k }, (_, i) => {
@@ -4189,19 +4192,55 @@ function kMeansClusters(points, k, maxIter) {
     return { lat: p.lat, lng: p.lng };
   });
 
-  let assignments = new Array(points.length).fill(0);
+  let assignments = new Array(points.length).fill(-1);
+
   for (let iter = 0; iter < maxIter; iter++) {
     let changed = false;
-    // Assign each point to nearest centroid
+
+    // Capacity-constrained assignment: use auction/greedy approach.
+    // Sort points by distance to their best centroid, assign greedily
+    // but respect the cap — overflow goes to next-best centroid.
+    const counts = new Array(k).fill(0);
+    const newAssignments = new Array(points.length).fill(-1);
+
+    // Build a sorted list of (pointIdx, centroidIdx, dist) for best choices
+    const bids = [];
     points.forEach((p, pi) => {
-      let best = 0, bestDist = Infinity;
       centroids.forEach((c, ci) => {
         const d = (p.lat - c.lat) ** 2 + (p.lng - c.lng) ** 2;
-        if (d < bestDist) { bestDist = d; best = ci; }
+        bids.push({ pi, ci, d });
       });
-      if (assignments[pi] !== best) { assignments[pi] = best; changed = true; }
     });
+    bids.sort((a, b) => a.d - b.d);
+
+    const assigned = new Array(points.length).fill(false);
+    for (const { pi, ci } of bids) {
+      if (assigned[pi]) continue;           // point already placed
+      if (counts[ci] >= cap) continue;      // cluster full
+      newAssignments[pi] = ci;
+      counts[ci]++;
+      assigned[pi] = true;
+    }
+
+    // Fallback: any unassigned point (shouldn't happen if k*cap >= total)
+    // goes to the least-full cluster closest to it
+    points.forEach((p, pi) => {
+      if (assigned[pi]) return;
+      let best = 0, bestScore = Infinity;
+      centroids.forEach((c, ci) => {
+        const d = (p.lat - c.lat) ** 2 + (p.lng - c.lng) ** 2;
+        const score = d + counts[ci] * 1e9; // heavily penalise full clusters
+        if (score < bestScore) { bestScore = score; best = ci; }
+      });
+      newAssignments[pi] = best;
+      counts[best]++;
+    });
+
+    // Check convergence
+    newAssignments.forEach((a, i) => { if (a !== assignments[i]) changed = true; });
+    assignments = newAssignments;
     if (!changed) break;
+
     // Recompute centroids
     centroids = centroids.map((_, ci) => {
       const members = points.filter((_, pi) => assignments[pi] === ci);
@@ -4212,6 +4251,7 @@ function kMeansClusters(points, k, maxIter) {
       };
     });
   }
+
   // Build cluster objects
   return centroids.map((c, ci) => ({
     centroidLat: c.lat, centroidLng: c.lng,
