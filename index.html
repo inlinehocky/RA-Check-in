@@ -878,6 +878,33 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </div>
         <div id="zo-zone-list"></div>
       </div>
+      <!-- Live Zone Map Editor -->
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+          <div>
+            <div class="card-title" style="margin-bottom:2px;">🗺️ Zone Map Editor</div>
+            <div class="card-sub">Current saved zones. Click any pin to move that business to a different zone.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select class="field-input" id="zme-filter-zone" style="font-size:0.8rem;padding:5px 10px;margin:0;min-width:130px;" onchange="zmeFilterZone()">
+              <option value="">All Zones</option>
+            </select>
+            <select class="field-input" id="zme-filter-type" style="font-size:0.8rem;padding:5px 10px;margin:0;min-width:130px;" onchange="zmeApplyFilters()">
+              <option value="">All Types</option>
+              <option value="Mechanical">Mechanical</option>
+              <option value="Collision">Collision</option>
+              <option value="Both">Both</option>
+            </select>
+            <button class="btn btn-outline" style="font-size:0.75rem;padding:5px 12px;" onclick="loadZoneMapEditor()">🔄 Reload</button>
+          </div>
+        </div>
+        <div id="zme-status" style="display:none;font-size:0.82rem;color:var(--text2);margin-bottom:8px;"></div>
+        <div style="height:420px;border-radius:10px;overflow:hidden;border:1px solid var(--border2);">
+          <div id="zme-map" style="height:100%;width:100%;"></div>
+        </div>
+        <div id="zme-legend" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:0.72rem;"></div>
+      </div>
+
       <!-- Snapshot history -->
       <div class="card" id="zo-history-card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -4106,6 +4133,7 @@ const ZO_COLORS = [
 async function renderZoneOptimizerTab() {
   resetZoneOptimizer(true);
   await loadZoneSnapshots();
+  await loadZoneMapEditor();
 }
 
 function resetZoneOptimizer(silent) {
@@ -4146,11 +4174,11 @@ async function runZoneOptimizer() {
 
   const total = bizList.length;
   const numZones = Math.max(1, Math.ceil(total / perZone));
-  statusEl.innerHTML = `<div style="color:var(--text2);font-size:0.85rem;">🔢 ${total} businesses → ${numZones} zones (~${perZone} each). Running optimizer…</div>`;
+  statusEl.innerHTML = `<div style="color:var(--text2);font-size:0.85rem;">🔢 ${total} businesses → ${numZones} zones (max ${perZone} each). Running optimizer…</div>`;
 
-  // K-means clustering on lat/lng
+  // Capacity-constrained k-means clustering on lat/lng
   const points = bizList.map(b => ({ lat: parseFloat(b.latitude), lng: parseFloat(b.longitude), biz: b }));
-  const clusters = kMeansClusters(points, numZones, 60);
+  const clusters = kMeansClusters(points, numZones, perZone, 60);
 
   // Sort clusters north→south by centroid lat, assign names
   clusters.sort((a, b) => b.centroidLat - a.centroidLat);
@@ -4178,8 +4206,11 @@ async function runZoneOptimizer() {
   renderZoResults(prefix, numZones, total);
 }
 
-// ── K-Means (Euclidean on lat/lng — fine for metro-scale areas) ──
-function kMeansClusters(points, k, maxIter) {
+// ── Capacity-Constrained K-Means (Euclidean on lat/lng — fine for metro-scale areas) ──
+// perZone is a HARD MAX — no cluster will ever exceed it.
+function kMeansClusters(points, k, perZone, maxIter) {
+  const cap = perZone; // hard maximum per zone
+
   // Seed centroids by spreading evenly across longitude range
   const sorted = [...points].sort((a, b) => a.lng - b.lng);
   let centroids = Array.from({ length: k }, (_, i) => {
@@ -4187,19 +4218,55 @@ function kMeansClusters(points, k, maxIter) {
     return { lat: p.lat, lng: p.lng };
   });
 
-  let assignments = new Array(points.length).fill(0);
+  let assignments = new Array(points.length).fill(-1);
+
   for (let iter = 0; iter < maxIter; iter++) {
     let changed = false;
-    // Assign each point to nearest centroid
+
+    // Capacity-constrained assignment: use auction/greedy approach.
+    // Sort points by distance to their best centroid, assign greedily
+    // but respect the cap — overflow goes to next-best centroid.
+    const counts = new Array(k).fill(0);
+    const newAssignments = new Array(points.length).fill(-1);
+
+    // Build a sorted list of (pointIdx, centroidIdx, dist) for best choices
+    const bids = [];
     points.forEach((p, pi) => {
-      let best = 0, bestDist = Infinity;
       centroids.forEach((c, ci) => {
         const d = (p.lat - c.lat) ** 2 + (p.lng - c.lng) ** 2;
-        if (d < bestDist) { bestDist = d; best = ci; }
+        bids.push({ pi, ci, d });
       });
-      if (assignments[pi] !== best) { assignments[pi] = best; changed = true; }
     });
+    bids.sort((a, b) => a.d - b.d);
+
+    const assigned = new Array(points.length).fill(false);
+    for (const { pi, ci } of bids) {
+      if (assigned[pi]) continue;           // point already placed
+      if (counts[ci] >= cap) continue;      // cluster full
+      newAssignments[pi] = ci;
+      counts[ci]++;
+      assigned[pi] = true;
+    }
+
+    // Fallback: any unassigned point (shouldn't happen if k*cap >= total)
+    // goes to the least-full cluster closest to it
+    points.forEach((p, pi) => {
+      if (assigned[pi]) return;
+      let best = 0, bestScore = Infinity;
+      centroids.forEach((c, ci) => {
+        const d = (p.lat - c.lat) ** 2 + (p.lng - c.lng) ** 2;
+        const score = d + counts[ci] * 1e9; // heavily penalise full clusters
+        if (score < bestScore) { bestScore = score; best = ci; }
+      });
+      newAssignments[pi] = best;
+      counts[best]++;
+    });
+
+    // Check convergence
+    newAssignments.forEach((a, i) => { if (a !== assignments[i]) changed = true; });
+    assignments = newAssignments;
     if (!changed) break;
+
     // Recompute centroids
     centroids = centroids.map((_, ci) => {
       const members = points.filter((_, pi) => assignments[pi] === ci);
@@ -4210,6 +4277,7 @@ function kMeansClusters(points, k, maxIter) {
       };
     });
   }
+
   // Build cluster objects
   return centroids.map((c, ci) => ({
     centroidLat: c.lat, centroidLng: c.lng,
@@ -4257,7 +4325,10 @@ function renderZoResults(prefix, numZones, total) {
   const zoneOpts  = zoneNames.map(z => `<option value="${z}">${z}</option>`).join('');
 
   const byZone = {};
-  zoneNames.forEach(z => { byZone[z] = _zoProposed.filter(b => b.zone === z); });
+  zoneNames.forEach(z => {
+    byZone[z] = _zoProposed.filter(b => b.zone === z)
+      .sort((a, b) => a.business_name.localeCompare(b.business_name));
+  });
 
   document.getElementById('zo-zone-list').innerHTML = zoneNames.map((z, zi) => {
     const members = byZone[z];
@@ -4303,6 +4374,145 @@ function moveZoBiz(acct, newZone) {
   renderZoResults(prefix, zoneNames.length, _zoProposed.length);
 }
 
+// ─── Zone Map Editor ───────────────────────────────────────────────────────
+let _zmeMap = null, _zmeLayerGroup = null, _zmeBizList = [], _zmeZoneNames = [];
+
+async function loadZoneMapEditor() {
+  const statusEl = document.getElementById('zme-status');
+  const legendEl = document.getElementById('zme-legend');
+  if (!statusEl) return;
+  statusEl.style.display = 'block';
+  statusEl.textContent = 'Loading businesses…';
+
+  const { data, error } = await db.from('businesses')
+    .select('account_number, business_name, latitude, longitude, zone, business_type, city, state')
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null)
+    .order('business_name');
+
+  if (error) { statusEl.textContent = 'Error loading businesses.'; return; }
+  _zmeBizList = data || [];
+  _zmeZoneNames = [...new Set(_zmeBizList.map(b => b.zone).filter(Boolean))].sort();
+
+  // Populate zone filter
+  const zoneSelect = document.getElementById('zme-filter-zone');
+  if (zoneSelect) {
+    zoneSelect.innerHTML = '<option value="">All Zones</option>' +
+      _zmeZoneNames.map(z => `<option value="${z}">${z}</option>`).join('');
+  }
+
+  // Build legend
+  if (legendEl) {
+    legendEl.innerHTML = _zmeZoneNames.map((z, i) => {
+      const color = ZO_COLORS[i % ZO_COLORS.length];
+      return `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--surface2);border-radius:20px;">
+        <span style="width:9px;height:9px;border-radius:50%;background:${color};display:inline-block;"></span>${z}
+      </span>`;
+    }).join('');
+  }
+
+  statusEl.style.display = 'none';
+
+  // Init map
+  if (!_zmeMap) {
+    setTimeout(() => {
+      _zmeMap = L.map('zme-map', { preferCanvas: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        subdomains: ['a','b','c'],
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+      }).addTo(_zmeMap);
+      _zmeLayerGroup = L.layerGroup().addTo(_zmeMap);
+      zmeRefreshPins('', '');
+    }, 80);
+  } else {
+    zmeRefreshPins('', '');
+  }
+}
+
+function zmeFilterZone() {
+  const zone = document.getElementById('zme-filter-zone')?.value || '';
+  const type = document.getElementById('zme-filter-type')?.value || '';
+  zmeRefreshPins(zone, type);
+  if (zone && _zmeMap) {
+    const pins = _zmeBizList.filter(b => b.zone === zone && b.latitude && b.longitude);
+    if (pins.length) {
+      _zmeMap.fitBounds(pins.map(b => [b.latitude, b.longitude]), { padding: [24, 24] });
+    }
+  }
+}
+
+function zmeApplyFilters() {
+  const zone = document.getElementById('zme-filter-zone')?.value || '';
+  const type = document.getElementById('zme-filter-type')?.value || '';
+  zmeRefreshPins(zone, type);
+}
+
+function zmeRefreshPins(filterZone, filterType) {
+  if (!_zmeMap || !_zmeLayerGroup) return;
+  _zmeLayerGroup.clearLayers();
+  const zoneOpts = _zmeZoneNames.map(z => `<option value="${z}">${z}</option>`).join('');
+
+  let visible = _zmeBizList;
+  if (filterZone) visible = visible.filter(b => b.zone === filterZone);
+  if (filterType) visible = visible.filter(b => b.business_type === filterType);
+
+  visible.forEach(b => {
+    if (!b.latitude || !b.longitude) return;
+    const zi = _zmeZoneNames.indexOf(b.zone);
+    const color = zi >= 0 ? ZO_COLORS[zi % ZO_COLORS.length] : '#999';
+    const selectId = `zme-sel-${b.account_number}`;
+    const popup = L.popup({ maxWidth: 260 }).setContent(`
+      <div style="font-size:0.82rem;">
+        <b style="font-size:0.88rem;">${b.business_name}</b><br>
+        <span style="color:#888;">${b.city || ''} ${b.state || ''}</span><br>
+        <div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <label style="font-size:0.75rem;color:#666;">Zone:</label>
+          <select id="${selectId}" style="font-size:0.78rem;padding:3px 6px;border-radius:5px;border:1px solid #ccc;cursor:pointer;">
+            ${zoneOpts.replace(`value="${b.zone}"`, `value="${b.zone}" selected`)}
+          </select>
+          <button onclick="zmeSaveBiz('${b.account_number}','${selectId}')"
+            style="font-size:0.75rem;padding:3px 10px;background:var(--teal,#1abc9c);color:#fff;border:none;border-radius:5px;cursor:pointer;">Save</button>
+        </div>
+      </div>`);
+    const marker = L.circleMarker([b.latitude, b.longitude], {
+      radius: 7, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.88
+    }).bindPopup(popup);
+    _zmeLayerGroup.addLayer(marker);
+  });
+
+  if (!filterZone) {
+    const coords = visible.filter(b => b.latitude && b.longitude).map(b => [b.latitude, b.longitude]);
+    if (coords.length && _zmeMap) _zmeMap.fitBounds(coords, { padding: [24, 24] });
+  }
+}
+
+async function zmeSaveBiz(accountNumber, selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const newZone = sel.value;
+
+  const { error: bizErr } = await db.from('businesses').update({ zone: newZone }).eq('account_number', accountNumber);
+  if (bizErr) { showToast('Error saving zone', true); console.error(bizErr); return; }
+
+  // Re-zone unsent entries
+  await db.from('entries').update({ zone: newZone }).eq('account_number', accountNumber).is('used_in_report_at', null);
+
+  // Update local list
+  const biz = _zmeBizList.find(b => b.account_number === accountNumber);
+  if (biz) biz.zone = newZone;
+  _zmeZoneNames = [...new Set(_zmeBizList.map(b => b.zone).filter(Boolean))].sort();
+
+  showToast(`✓ ${biz?.business_name || accountNumber} → ${newZone}`);
+  if (_zmeMap) _zmeMap.closePopup();
+
+  const filterZone = document.getElementById('zme-filter-zone')?.value || '';
+  const filterType = document.getElementById('zme-filter-type')?.value || '';
+  zmeRefreshPins(filterZone, filterType);
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+
 async function applyZoneAssignments() {
   if (!_zoProposed.length) return;
   const btn = event.target;
@@ -4333,11 +4543,27 @@ async function applyZoneAssignments() {
     if (error) { console.error(error); failed++; }
   }
 
+  // 3. Re-zone unsent entries to match new business zones
+  let entriesUpdated = 0, entriesFailed = 0;
+  for (const u of updates) {
+    const { error: entErr, count } = await db.from('entries')
+      .update({ zone: u.zone })
+      .eq('account_number', u.account_number)
+      .is('used_in_report_at', null);
+    if (entErr) { console.error(entErr); entriesFailed++; }
+    else if (count) entriesUpdated += count;
+  }
+
   btn.disabled = false; btn.textContent = '✅ Apply to All Businesses';
+  const entryNote = entriesFailed
+    ? ` (${entriesFailed} entry errors)`
+    : entriesUpdated
+      ? ` · ${entriesUpdated} unsent entries re-zoned`
+      : '';
   if (failed) {
-    showToast(`Applied with ${failed} error(s) — check console`, true);
+    showToast(`Applied with ${failed} error(s) — check console${entryNote}`, true);
   } else {
-    showToast(`✓ ${updates.length} businesses updated`);
+    showToast(`✓ ${updates.length} businesses updated${entryNote}`);
     document.getElementById('zo-status').innerHTML =
       `<div style="color:var(--teal);font-size:0.85rem;font-weight:700;">✅ Zone assignments saved for ${updates.length} businesses. A snapshot was created so you can restore if needed.</div>`;
     allBusinesses = [];
@@ -4429,9 +4655,26 @@ async function restoreSnapshot(snapId, label) {
     if (upErr) { console.error(upErr); failed++; }
   }
 
+  // Re-zone unsent entries to match restored business zones
+  let entriesUpdated = 0, entriesFailed = 0;
+  for (const b of snap) {
+    if (!b.zone) continue;
+    const { error: entErr, count } = await db.from('entries')
+      .update({ zone: b.zone })
+      .eq('account_number', b.account_number)
+      .is('used_in_report_at', null);
+    if (entErr) { console.error(entErr); entriesFailed++; }
+    else if (count) entriesUpdated += count;
+  }
+
   allBusinesses = [];
-  if (failed) showToast(`Restored with ${failed} error(s)`, true);
-  else showToast(`✓ ${snap.length} businesses restored to "${label}"`);
+  const entryNote = entriesFailed
+    ? ` (${entriesFailed} entry errors)`
+    : entriesUpdated
+      ? ` · ${entriesUpdated} unsent entries re-zoned`
+      : '';
+  if (failed) showToast(`Restored with ${failed} error(s)${entryNote}`, true);
+  else showToast(`✓ ${snap.length} businesses restored to "${label}"${entryNote}`);
   await loadZoneSnapshots();
 }
 
