@@ -4299,7 +4299,10 @@ function renderZoResults(prefix, numZones, total) {
   const zoneOpts  = zoneNames.map(z => `<option value="${z}">${z}</option>`).join('');
 
   const byZone = {};
-  zoneNames.forEach(z => { byZone[z] = _zoProposed.filter(b => b.zone === z); });
+  zoneNames.forEach(z => {
+    byZone[z] = _zoProposed.filter(b => b.zone === z)
+      .sort((a, b) => a.business_name.localeCompare(b.business_name));
+  });
 
   document.getElementById('zo-zone-list').innerHTML = zoneNames.map((z, zi) => {
     const members = byZone[z];
