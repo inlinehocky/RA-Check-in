@@ -880,6 +880,33 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </div>
         <div id="zo-zone-list"></div>
       </div>
+      <!-- Live Zone Map Editor -->
+      <div class="card" style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+          <div>
+            <div class="card-title" style="margin-bottom:2px;">🗺️ Zone Map Editor</div>
+            <div class="card-sub">Current saved zones. Click any pin to move that business to a different zone.</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <select class="field-input" id="zme-filter-zone" style="font-size:0.8rem;padding:5px 10px;margin:0;min-width:130px;" onchange="zmeFilterZone()">
+              <option value="">All Zones</option>
+            </select>
+            <select class="field-input" id="zme-filter-type" style="font-size:0.8rem;padding:5px 10px;margin:0;min-width:130px;" onchange="zmeApplyFilters()">
+              <option value="">All Types</option>
+              <option value="Mechanical">Mechanical</option>
+              <option value="Collision">Collision</option>
+              <option value="Both">Both</option>
+            </select>
+            <button class="btn btn-outline" style="font-size:0.75rem;padding:5px 12px;" onclick="loadZoneMapEditor()">🔄 Reload</button>
+          </div>
+        </div>
+        <div id="zme-status" style="display:none;font-size:0.82rem;color:var(--text2);margin-bottom:8px;"></div>
+        <div style="height:420px;border-radius:10px;overflow:hidden;border:1px solid var(--border2);">
+          <div id="zme-map" style="height:100%;width:100%;"></div>
+        </div>
+        <div id="zme-legend" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:0.72rem;"></div>
+      </div>
+
       <!-- Snapshot history -->
       <div class="card" id="zo-history-card">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
@@ -4346,6 +4373,157 @@ function moveZoBiz(acct, newZone) {
   // Re-render the list to update counts (keeps selects in sync)
   const prefix = document.getElementById('zo-prefix').value.trim().toUpperCase();
   renderZoResults(prefix, zoneNames.length, _zoProposed.length);
+}
+
+// ═══ ZONE MAP EDITOR ═══
+let _zmeMap = null, _zmeLayerGroup = null, _zmeBizList = [], _zmeZoneNames = [];
+
+async function loadZoneMapEditor() {
+  const statusEl = document.getElementById('zme-status');
+  statusEl.style.display = 'block';
+  statusEl.textContent = '⏳ Loading businesses…';
+
+  const { data, error } = await db.from('businesses')
+    .select('account_number, business_name, city, state, zone, latitude, longitude, business_type')
+    .eq('active_ind', 1)
+    .eq('do_not_visit', false)
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null)
+    .not('zone', 'is', null);
+
+  if (error || !data?.length) {
+    statusEl.textContent = error?.message || 'No businesses with zones and coordinates found.';
+    return;
+  }
+
+  _zmeBizList = data;
+  _zmeZoneNames = [...new Set(data.map(b => b.zone))].sort();
+
+  // Populate zone filter dropdown
+  const zf = document.getElementById('zme-filter-zone');
+  while (zf.options.length > 1) zf.remove(1);
+  _zmeZoneNames.forEach(z => { const o = document.createElement('option'); o.value = z; o.textContent = z; zf.appendChild(o); });
+
+  statusEl.textContent = `${data.length} businesses across ${_zmeZoneNames.length} zones.`;
+
+  if (!_zmeMap) {
+    setTimeout(() => {
+      _zmeMap = L.map('zme-map', { preferCanvas: true });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        subdomains: ['a','b','c'],
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19
+      }).addTo(_zmeMap);
+      _zmeLayerGroup = L.layerGroup().addTo(_zmeMap);
+      zmeRefreshPins();
+    }, 80);
+  } else {
+    zmeRefreshPins();
+  }
+}
+
+function zmeFilterZone() {
+  const zone = document.getElementById('zme-filter-zone').value;
+  if (zone && _zmeMap && _zmeBizList.length) {
+    const members = _zmeBizList.filter(b => b.zone === zone);
+    if (members.length) {
+      const coords = members.map(b => [parseFloat(b.latitude), parseFloat(b.longitude)]);
+      _zmeMap.fitBounds(coords, { padding: [40, 40] });
+    }
+  }
+  zmeApplyFilters();
+}
+
+function zmeApplyFilters() {
+  if (!_zmeMap) return;
+  const filterZone = document.getElementById('zme-filter-zone').value;
+  const filterType = document.getElementById('zme-filter-type').value;
+  zmeRefreshPins(filterZone, filterType);
+}
+
+function zmeRefreshPins(filterZone, filterType) {
+  if (!_zmeMap || !_zmeLayerGroup) return;
+  _zmeLayerGroup.clearLayers();
+
+  const visibleZones = filterZone ? [filterZone] : _zmeZoneNames;
+  const zoneOpts = _zmeZoneNames.map(z => `<option value="${z}">${z}</option>`).join('');
+
+  let rendered = 0;
+  _zmeBizList.forEach(b => {
+    if (filterZone && b.zone !== filterZone) return;
+    if (filterType && b.business_type !== filterType) return;
+    const zi = _zmeZoneNames.indexOf(b.zone);
+    const color = ZO_COLORS[zi % ZO_COLORS.length];
+    const lat = parseFloat(b.latitude), lng = parseFloat(b.longitude);
+    const marker = L.circleMarker([lat, lng], {
+      radius: 7, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.88
+    });
+    const popupId = `zme-pop-${b.account_number.replace(/[^a-z0-9]/gi,'_')}`;
+    marker.bindPopup(`
+      <div style="min-width:200px;font-family:system-ui,sans-serif;">
+        <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px;">${b.business_name}</div>
+        <div style="font-size:0.75rem;color:#666;margin-bottom:8px;">${b.city||''} ${b.state||''} · ${b.business_type||''}</div>
+        <div style="font-size:0.75rem;font-weight:600;margin-bottom:4px;">Current Zone: <span style="color:${color};">${b.zone}</span></div>
+        <div style="font-size:0.75rem;margin-bottom:6px;">Move to:</div>
+        <select id="${popupId}" style="width:100%;font-size:0.78rem;padding:4px 6px;border-radius:5px;border:1px solid #ccc;margin-bottom:8px;">
+          ${zoneOpts.replace(`value="${b.zone}"`, `value="${b.zone}" selected`)}
+        </select>
+        <button onclick="zmeSaveBiz('${b.account_number}','${popupId}')" style="width:100%;padding:5px;background:#0d9488;color:#fff;border:none;border-radius:5px;font-size:0.78rem;font-weight:700;cursor:pointer;">✅ Save</button>
+      </div>
+    `, { maxWidth: 240 });
+    _zmeLayerGroup.addLayer(marker);
+    rendered++;
+  });
+
+  // Fit bounds if showing all
+  if (!filterZone && !filterType && rendered) {
+    const coords = _zmeBizList.map(b => [parseFloat(b.latitude), parseFloat(b.longitude)]);
+    _zmeMap.fitBounds(coords, { padding: [24, 24] });
+  }
+
+  // Legend
+  const legendEl = document.getElementById('zme-legend');
+  legendEl.innerHTML = visibleZones.map(z => {
+    const zi = _zmeZoneNames.indexOf(z);
+    const color = ZO_COLORS[zi % ZO_COLORS.length];
+    const count = _zmeBizList.filter(b => b.zone === z && (!filterType || b.business_type === filterType)).length;
+    return `<span style="display:flex;align-items:center;gap:4px;background:var(--surface2);padding:3px 8px;border-radius:20px;cursor:pointer;" onclick="document.getElementById('zme-filter-zone').value='${z}';zmeFilterZone()">
+      <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>${z} <span style="color:var(--text3);">(${count})</span></span>`;
+  }).join('');
+}
+
+async function zmeSaveBiz(accountNumber, selectId) {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const newZone = sel.value;
+  const biz = _zmeBizList.find(b => b.account_number === accountNumber);
+  if (!biz || biz.zone === newZone) { _zmeMap.closePopup(); return; }
+
+  sel.disabled = true;
+  const btn = sel.nextElementSibling;
+  if (btn) btn.textContent = 'Saving…';
+
+  // Update business zone
+  const { error: bizErr } = await db.from('businesses').update({ zone: newZone }).eq('account_number', accountNumber);
+  if (bizErr) {
+    showToast('Failed to update business zone', true);
+    sel.disabled = false; if (btn) btn.textContent = '✅ Save';
+    return;
+  }
+
+  // Update unsent entries
+  await db.from('entries').update({ zone: newZone }).eq('account_number', accountNumber).is('used_in_report_at', null);
+
+  // Update local cache
+  const oldZone = biz.zone;
+  biz.zone = newZone;
+  _zmeMap.closePopup();
+  showToast(`✓ ${biz.business_name} → ${newZone}`);
+
+  // Re-render pins with current filters
+  const filterZone = document.getElementById('zme-filter-zone').value;
+  const filterType = document.getElementById('zme-filter-type').value;
+  zmeRefreshPins(filterZone, filterType);
 }
 
 async function applyZoneAssignments() {
