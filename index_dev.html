@@ -847,8 +847,11 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
             <input class="field-input" type="number" id="zo-per-zone" value="15" min="3" max="60" style="margin-bottom:0;">
           </div>
           <div style="flex:1;min-width:160px;">
-            <div class="field-label">Zone Name Prefix</div>
-            <input class="field-input" type="text" id="zo-prefix" value="ZONE" placeholder="e.g. DAL, ZONE, AREA" style="margin-bottom:0;">
+            <div class="field-label">Region</div>
+            <select class="field-input" id="zo-prefix" style="margin-bottom:0;">
+              <option value="DAL">Dallas (DAL)</option>
+              <option value="FTW">Fort Worth (FTW)</option>
+            </select>
           </div>
           <div style="flex:1;min-width:160px;">
             <div class="field-label">Business Type</div>
@@ -4238,25 +4241,39 @@ async function runZoneOptimizer() {
     .not('longitude', 'is', null);
   if (bizType) query = query.eq('business_type', bizType);
 
-  const { data: bizList, error } = await query;
-  if (error || !bizList?.length) {
+  const { data: rawBizList, error } = await query;
+  if (error || !rawBizList?.length) {
     statusEl.innerHTML = `<div style="color:var(--red);font-size:0.85rem;">❌ ${error?.message || 'No businesses with coordinates found.'}</div>`;
+    return;
+  }
+
+  // Filter to only businesses currently in the selected region
+  // A business belongs to DAL if its zone starts with "DAL_", FTW if it starts with "FTW_"
+  // Also include businesses with no zone yet (unassigned) only when running DAL
+  const bizList = rawBizList.filter(b => {
+    if (!b.zone) return false; // skip businesses with no zone assigned
+    const zonePrefix = b.zone.toUpperCase().split('_')[0];
+    return zonePrefix === prefix.toUpperCase();
+  });
+
+  if (!bizList.length) {
+    statusEl.innerHTML = `<div style="color:var(--red);font-size:0.85rem;">❌ No businesses currently assigned to ${prefix} zones found. Make sure businesses have zone values starting with "${prefix}_".</div>`;
     return;
   }
 
   const total = bizList.length;
   const numZones = Math.max(1, Math.ceil(total / perZone));
-  statusEl.innerHTML = `<div style="color:var(--text2);font-size:0.85rem;">🔢 ${total} businesses → ${numZones} zones (max ${perZone} each). Running optimizer…</div>`;
+  statusEl.innerHTML = `<div style="color:var(--text2);font-size:0.85rem;">🔢 ${total} ${prefix} businesses → ${numZones} zones (max ${perZone} each). Running optimizer…</div>`;
 
   // Capacity-constrained k-means clustering on lat/lng
   const points = bizList.map(b => ({ lat: parseFloat(b.latitude), lng: parseFloat(b.longitude), biz: b }));
   const clusters = kMeansClusters(points, numZones, perZone, 60);
 
-  // Sort clusters north→south by centroid lat, assign names
+  // Sort clusters north→south by centroid lat, assign names like DAL_01, FTW_01
   clusters.sort((a, b) => b.centroidLat - a.centroidLat);
   _zoProposed = [];
   clusters.forEach((cl, i) => {
-    const zoneName = `${prefix}${String(i + 1).padStart(2, '0')}`;
+    const zoneName = `${prefix}_${String(i + 1).padStart(2, '0')}`;
     cl.points.forEach(p => {
       _zoProposed.push({
         account_number: p.biz.account_number,
