@@ -555,7 +555,10 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         <div class="card-head">
           <div><div class="card-title">🏢 Business Directory</div>
             <div class="card-sub">Master list of all businesses.</div></div>
-          <button class="btn btn-outline" onclick="toggleAddBizForm()">+ Add Business</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="exportBusinessesXLSX()" style="font-size:0.82rem;">⬇️ Export Excel</button>
+            <button class="btn btn-outline" onclick="toggleAddBizForm()">+ Add Business</button>
+          </div>
         </div>
 
         <!-- Add/Edit form -->
@@ -2687,14 +2690,14 @@ async function renderReportButtons(filteredList) {
     return;
   }
 
-  // Group zone values by their zones-table prefix key
-  // e.g. DAL, DAL01, DAL02 all map to zone_key=DAL (zone_name=Dallas)
-  // If no prefix match, treat each value as its own group
-  const grouped = {}; // key: zone_key → { zone_name, zone_key, zoneValues[] }
+  // Group zone values by top-level region prefix only (DAL or FTW),
+  // so ALL DAL_* sub-zones collapse into one Dallas card and ALL FTW_* into one Fort Worth card.
+  const regionNames = { DAL: 'Dallas', FTW: 'Fort Worth', ARL: 'Fort Worth', PLN: 'Dallas' };
+  const grouped = {}; // key: region prefix → { zone_name, zone_key, zoneValues[] }
   distinctZones.forEach(zv => {
-    const zObj = allZones.find(z => zv.toUpperCase().startsWith(z.zone_key.toUpperCase()));
-    const key = zObj ? zObj.zone_key : zv;
-    const name = zObj ? zObj.zone_name : zv;
+    // Always use the segment before the first '_' as the grouping key (e.g. DAL_D1A → DAL)
+    const key = (zv.includes('_') ? zv.split('_')[0] : zv).toUpperCase();
+    const name = regionNames[key] || key;
     if (!grouped[key]) grouped[key] = { zone_key: key, zone_name: name, zoneValues: [] };
     grouped[key].zoneValues.push(zv);
   });
@@ -3336,6 +3339,74 @@ async function renderBusinessDirectory() {
   }
   allBusinesses = allBizRows;
   filterBizDirectory();
+}
+
+async function exportBusinessesXLSX() {
+  if (!allBusinesses.length) { showToast('No businesses loaded — open the tab first', true); return; }
+  const btn = document.querySelector('[onclick="exportBusinessesXLSX()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Exporting…'; }
+
+  try {
+    const XLSX = await new Promise((resolve, reject) => {
+      if (window.XLSX) { resolve(window.XLSX); return; }
+      const s = document.createElement('script');
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+
+    // Column definitions: [header, field, transform?]
+    const COLS = [
+      ['Account #',       'account_number'],
+      ['Business Name',   'business_name'],
+      ['Business Type',   'business_type'],
+      ['Zone',            'zone'],
+      ['Active',          'active_ind',     v => v === 0 || v === false ? 'No' : 'Yes'],
+      ['Do Not Visit',    'do_not_visit',   v => v ? 'Yes' : 'No'],
+      ['DNV Reason',      'dnv_reason'],
+      ['Contact Name',    'contact_name'],
+      ['Phone',           'phone'],
+      ['Email',           'email'],
+      ['Address',         'address'],
+      ['City',            'city'],
+      ['State',           'state'],
+      ['Zip',             'zip'],
+      ['Latitude',        'latitude'],
+      ['Longitude',       'longitude'],
+      ['Notes',           'notes'],
+    ];
+
+    const rows = allBusinesses.map(b => {
+      const row = {};
+      COLS.forEach(([header, field, transform]) => {
+        const raw = b[field] ?? '';
+        row[header] = transform ? transform(raw) : raw;
+      });
+      return row;
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows, { header: COLS.map(c => c[0]) });
+
+    // Column widths
+    ws['!cols'] = [
+      {wch:14},{wch:32},{wch:14},{wch:14},{wch:8},{wch:12},{wch:28},
+      {wch:22},{wch:16},{wch:28},{wch:30},{wch:18},{wch:8},{wch:10},
+      {wch:12},{wch:12},{wch:30}
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Businesses');
+
+    const date = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, `businesses_${date}.xlsx`);
+    showToast(`✓ Exported ${allBusinesses.length} businesses`);
+  } catch(e) {
+    console.error(e);
+    showToast('Export failed — check console', true);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⬇️ Export Excel'; }
+  }
 }
 
 function filterBizDirectory() {
