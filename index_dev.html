@@ -868,8 +868,18 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <div id="zo-status" class="card" style="display:none;margin-bottom:16px;"></div>
       <!-- Map preview -->
       <div id="zo-map-wrap" style="display:none;margin-bottom:16px;">
-        <div style="height:380px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
-          <div id="zo-map" style="height:100%;width:100%;"></div>
+        <div style="display:flex;gap:0;border-radius:12px;overflow:hidden;border:1px solid var(--border2);height:380px;">
+          <!-- Zone Legend -->
+          <div id="zo-legend-panel" style="width:160px;min-width:140px;max-width:180px;background:var(--surface2);border-right:1px solid var(--border2);overflow-y:auto;padding:10px 8px;flex-shrink:0;">
+            <div style="font-size:0.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--border2);">Zones</div>
+            <div id="zo-legend-items" style="display:flex;flex-direction:column;gap:4px;"></div>
+            <div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--border2);display:flex;gap:4px;">
+              <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(true)">All</button>
+              <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(false)">None</button>
+            </div>
+          </div>
+          <!-- Map -->
+          <div id="zo-map" style="flex:1;height:100%;"></div>
         </div>
       </div>
       <!-- Proposed assignments table -->
@@ -4197,6 +4207,7 @@ async function grClearFlagOnly() {
 let _zoProposed = [];   // [{account_number, business_name, lat, lng, zone, origZone}]
 let _zoMap = null;
 let _zoLayerGroup = null;
+let _zoVisibleZones = new Set(); // zones currently checked in the legend
 
 // Palette for up to 20 zones
 const ZO_COLORS = [
@@ -4213,9 +4224,11 @@ async function renderZoneOptimizerTab() {
 
 function resetZoneOptimizer(silent) {
   _zoProposed = [];
+  _zoVisibleZones = new Set();
   document.getElementById('zo-status').style.display = 'none';
   document.getElementById('zo-map-wrap').style.display = 'none';
   document.getElementById('zo-results').style.display = 'none';
+  document.getElementById('zo-legend-items').innerHTML = '';
   if (_zoMap) { _zoMap.remove(); _zoMap = null; _zoLayerGroup = null; }
   if (!silent) showToast('Zone proposal discarded');
 }
@@ -4377,6 +4390,12 @@ function kMeansClusters(points, k, perZone, maxIter) {
 function renderZoMap() {
   document.getElementById('zo-map-wrap').style.display = 'block';
   if (_zoMap) { _zoMap.remove(); _zoMap = null; }
+
+  // Build zone list and auto-select all zones generated
+  const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
+  _zoVisibleZones = new Set(zoneNames); // auto-select all on generate
+  renderZoLegend(zoneNames);
+
   setTimeout(() => {
     _zoMap = L.map('zo-map', { preferCanvas: true });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -4389,11 +4408,45 @@ function renderZoMap() {
   }, 80);
 }
 
+function renderZoLegend(zoneNames) {
+  const container = document.getElementById('zo-legend-items');
+  container.innerHTML = zoneNames.map((z, zi) => {
+    const color = ZO_COLORS[zi % ZO_COLORS.length];
+    const checked = _zoVisibleZones.has(z) ? 'checked' : '';
+    const count = _zoProposed.filter(b => b.zone === z).length;
+    return `
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:5px;font-size:0.75rem;color:var(--text);" title="${z} — ${count} businesses">
+        <input type="checkbox" ${checked} style="accent-color:${color};cursor:pointer;width:13px;height:13px;flex-shrink:0;" onchange="zoLegendToggle('${z}', this.checked)">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+        <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">${z}</span>
+        <span style="font-size:0.65rem;color:var(--text3);flex-shrink:0;">${count}</span>
+      </label>`;
+  }).join('');
+}
+
+function zoLegendToggle(zoneName, visible) {
+  if (visible) { _zoVisibleZones.add(zoneName); }
+  else { _zoVisibleZones.delete(zoneName); }
+  refreshZoMapPins();
+}
+
+function zoLegendSelectAll(selectAll) {
+  const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
+  _zoVisibleZones = selectAll ? new Set(zoneNames) : new Set();
+  // Update checkboxes
+  const container = document.getElementById('zo-legend-items');
+  container.querySelectorAll('input[type="checkbox"]').forEach((cb, i) => {
+    cb.checked = selectAll;
+  });
+  refreshZoMapPins();
+}
+
 function refreshZoMapPins() {
   if (!_zoMap || !_zoLayerGroup) return;
   _zoLayerGroup.clearLayers();
   const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
-  _zoProposed.forEach(b => {
+  const visible = _zoProposed.filter(b => _zoVisibleZones.has(b.zone));
+  visible.forEach(b => {
     const ci = zoneNames.indexOf(b.zone);
     const color = ZO_COLORS[ci % ZO_COLORS.length];
     const marker = L.circleMarker([b.lat, b.lng], {
@@ -4401,8 +4454,9 @@ function refreshZoMapPins() {
     }).bindPopup(`<b>${b.business_name}</b><br>${b.zone}<br>${b.city || ''}`);
     _zoLayerGroup.addLayer(marker);
   });
-  const coords = _zoProposed.map(b => [b.lat, b.lng]);
-  if (coords.length) _zoMap.fitBounds(coords, { padding: [24, 24] });
+  // Fit bounds to all proposed points (not just visible) so panning context is preserved
+  const allCoords = _zoProposed.map(b => [b.lat, b.lng]);
+  if (visible.length && allCoords.length) _zoMap.fitBounds(allCoords, { padding: [24, 24] });
 }
 
 function renderZoResults(prefix, numZones, total) {
@@ -4451,13 +4505,12 @@ function renderZoResults(prefix, numZones, total) {
 function moveZoBiz(acct, newZone) {
   const biz = _zoProposed.find(b => b.account_number === acct);
   if (biz) biz.zone = newZone;
-  refreshZoMapPins();
-  // Refresh counts without full re-render
+  // If the new zone isn't yet in the visible set, add it
+  _zoVisibleZones.add(newZone);
+  // Update legend (counts may have changed; new zone may have appeared)
   const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
-  zoneNames.forEach((z, zi) => {
-    const members = _zoProposed.filter(b => b.zone === z);
-    // update headers - simpler to just re-render results
-  });
+  renderZoLegend(zoneNames);
+  refreshZoMapPins();
   // Re-render the list to update counts (keeps selects in sync)
   const prefix = document.getElementById('zo-prefix').value.trim().toUpperCase();
   renderZoResults(prefix, zoneNames.length, _zoProposed.length);
