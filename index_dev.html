@@ -290,6 +290,9 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 @keyframes popIn{from{opacity:0;transform:scale(0.94) translateY(8px)}to{opacity:1;transform:none}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+/* Zone map hover tooltip */
+.zo-tip{background:rgba(0,0,0,0.78)!important;color:#fff!important;border:none!important;border-radius:5px!important;font-size:0.72rem!important;font-weight:700!important;padding:3px 8px!important;white-space:nowrap!important;box-shadow:0 2px 6px rgba(0,0,0,0.3)!important;}
+.zo-tip::before{display:none!important;}
 </style>
 </head>
 <body>
@@ -873,12 +876,11 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <div id="zo-map" style="position:absolute;top:0;left:0;right:0;bottom:0;"></div>
           <!-- Zone Legend overlaid on the left -->
           <div id="zo-legend-panel" style="position:absolute;top:8px;left:8px;bottom:8px;width:150px;z-index:1000;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;flex-direction:column;overflow:hidden;">
-            <div style="padding:8px 8px 5px;font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);border-bottom:1px solid var(--border2);flex-shrink:0;">Zones</div>
+            <label style="padding:7px 8px 6px;font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);border-bottom:1px solid var(--border2);flex-shrink:0;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="zo-chk-all" checked style="cursor:pointer;width:13px;height:13px;flex-shrink:0;" onchange="zoLegendSelectAll(this.checked)">
+              Zones
+            </label>
             <div id="zo-legend-items" style="flex:1;overflow-y:auto;padding:5px 6px;display:flex;flex-direction:column;gap:2px;"></div>
-            <div style="padding:5px 6px;border-top:1px solid var(--border2);display:flex;gap:4px;flex-shrink:0;">
-              <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(true)">All</button>
-              <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(false)">None</button>
-            </div>
           </div>
         </div>
       </div>
@@ -917,10 +919,16 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           </div>
         </div>
         <div id="zme-status" style="display:none;font-size:0.82rem;color:var(--text2);margin-bottom:8px;"></div>
-        <div style="height:420px;border-radius:10px;overflow:hidden;border:1px solid var(--border2);">
-          <div id="zme-map" style="height:100%;width:100%;"></div>
+        <div style="position:relative;height:420px;border-radius:10px;overflow:hidden;border:1px solid var(--border2);">
+          <div id="zme-map" style="position:absolute;top:0;left:0;right:0;bottom:0;"></div>
+          <div id="zme-legend-panel" style="position:absolute;top:8px;left:8px;bottom:8px;width:160px;z-index:1000;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;flex-direction:column;overflow:hidden;">
+            <label style="padding:7px 8px 6px;font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);border-bottom:1px solid var(--border2);flex-shrink:0;display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="zme-chk-all" checked style="cursor:pointer;width:13px;height:13px;flex-shrink:0;" onchange="zmeLegendSelectAll(this.checked)">
+              Zones
+            </label>
+            <div id="zme-legend" style="flex:1;overflow-y:auto;padding:5px 6px;display:flex;flex-direction:column;gap:2px;"></div>
+          </div>
         </div>
-        <div id="zme-legend" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:0.72rem;"></div>
       </div>
 
       <!-- Snapshot history -->
@@ -4430,7 +4438,7 @@ function renderZoMap() {
   renderZoLegend(zoneNames);
 
   setTimeout(() => {
-    _zoMap = L.map('zo-map', { preferCanvas: true });
+    _zoMap = L.map('zo-map', { preferCanvas: false });
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       subdomains: ['a','b','c'],
       attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -4460,6 +4468,15 @@ function renderZoLegend(zoneNames) {
 function zoLegendToggle(zoneName, visible) {
   if (visible) { _zoVisibleZones.add(zoneName); }
   else { _zoVisibleZones.delete(zoneName); }
+  // Sync master checkbox state
+  const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
+  const master = document.getElementById('zo-chk-all');
+  if (master) {
+    const allOn = zoneNames.every(z => _zoVisibleZones.has(z));
+    const anyOn = zoneNames.some(z => _zoVisibleZones.has(z));
+    master.checked = allOn;
+    master.indeterminate = !allOn && anyOn;
+  }
   refreshZoMapPins();
 }
 
@@ -4470,6 +4487,8 @@ function zoLegendSelectAll(selectAll) {
     const cb = document.getElementById('zo-chk-' + z);
     if (cb) cb.checked = selectAll;
   });
+  const master = document.getElementById('zo-chk-all');
+  if (master) { master.checked = selectAll; master.indeterminate = false; }
   refreshZoMapPins();
 }
 
@@ -4483,7 +4502,8 @@ function refreshZoMapPins() {
     const color = ZO_COLORS[ci % ZO_COLORS.length];
     const marker = L.circleMarker([b.lat, b.lng], {
       radius: 7, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.88
-    }).bindPopup(`<b>${b.business_name}</b><br>${b.zone}<br>${b.city || ''}`);
+    }).bindTooltip(b.zone, { permanent: false, direction: 'top', offset: [0, -8], className: 'zo-tip' })
+      .bindPopup(`<b>${b.business_name}</b><br><span style="font-size:0.72rem;color:#888;">${b.account_number}</span><br>${b.zone}<br>${b.city || ''}`);
     _zoLayerGroup.addLayer(marker);
   });
   // Fit bounds to all proposed points (not just visible) so panning context is preserved
@@ -4534,6 +4554,35 @@ function renderZoResults(prefix, numZones, total) {
   }).join('');
 }
 
+function zmeLegendToggle(zoneName, visible) {
+  if (visible) { _zmeVisibleZones.add(zoneName); }
+  else { _zmeVisibleZones.delete(zoneName); }
+  // Sync master checkbox
+  const master = document.getElementById('zme-chk-all');
+  if (master) {
+    const allOn = _zmeZoneNames.every(z => _zmeVisibleZones.has(z));
+    const anyOn = _zmeZoneNames.some(z => _zmeVisibleZones.has(z));
+    master.checked = allOn;
+    master.indeterminate = !allOn && anyOn;
+  }
+  const filterZone = document.getElementById('zme-filter-zone').value;
+  const filterType = document.getElementById('zme-filter-type').value;
+  zmeRefreshPins(filterZone, filterType);
+}
+
+function zmeLegendSelectAll(selectAll) {
+  _zmeVisibleZones = selectAll ? new Set(_zmeZoneNames) : new Set();
+  _zmeZoneNames.forEach(z => {
+    const cb = document.getElementById('zme-chk-' + z.replace(/[^a-z0-9]/gi,'_'));
+    if (cb) cb.checked = selectAll;
+  });
+  const master = document.getElementById('zme-chk-all');
+  if (master) { master.checked = selectAll; master.indeterminate = false; }
+  const filterZone = document.getElementById('zme-filter-zone').value;
+  const filterType = document.getElementById('zme-filter-type').value;
+  zmeRefreshPins(filterZone, filterType);
+}
+
 function moveZoBiz(acct, newZone) {
   const biz = _zoProposed.find(b => b.account_number === acct);
   if (biz) biz.zone = newZone;
@@ -4549,7 +4598,7 @@ function moveZoBiz(acct, newZone) {
 }
 
 // ═══ ZONE MAP EDITOR ═══
-let _zmeMap = null, _zmeLayerGroup = null, _zmeBizList = [], _zmeZoneNames = [];
+let _zmeMap = null, _zmeLayerGroup = null, _zmeBizList = [], _zmeZoneNames = [], _zmeVisibleZones = new Set();
 
 async function loadZoneMapEditor() {
   const statusEl = document.getElementById('zme-status');
@@ -4571,6 +4620,7 @@ async function loadZoneMapEditor() {
 
   _zmeBizList = data;
   _zmeZoneNames = [...new Set(data.map(b => b.zone))].sort();
+  _zmeVisibleZones = new Set(_zmeZoneNames);
 
   // Populate zone filter dropdown
   const zf = document.getElementById('zme-filter-zone');
@@ -4581,7 +4631,7 @@ async function loadZoneMapEditor() {
 
   if (!_zmeMap) {
     setTimeout(() => {
-      _zmeMap = L.map('zme-map', { preferCanvas: true });
+      _zmeMap = L.map('zme-map', { preferCanvas: false });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         subdomains: ['a','b','c'],
         attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -4623,6 +4673,7 @@ function zmeRefreshPins(filterZone, filterType) {
 
   let rendered = 0;
   _zmeBizList.forEach(b => {
+    if (!_zmeVisibleZones.has(b.zone)) return;
     if (filterZone && b.zone !== filterZone) return;
     if (filterType && b.business_type !== filterType) return;
     const zi = _zmeZoneNames.indexOf(b.zone);
@@ -4630,11 +4681,12 @@ function zmeRefreshPins(filterZone, filterType) {
     const lat = parseFloat(b.latitude), lng = parseFloat(b.longitude);
     const marker = L.circleMarker([lat, lng], {
       radius: 7, fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.88
-    });
+    }).bindTooltip(b.zone, { permanent: false, direction: 'top', offset: [0, -8], className: 'zo-tip' });
     const popupId = `zme-pop-${b.account_number.replace(/[^a-z0-9]/gi,'_')}`;
     marker.bindPopup(`
       <div style="min-width:200px;font-family:system-ui,sans-serif;">
-        <div style="font-weight:700;font-size:0.88rem;margin-bottom:4px;">${b.business_name}</div>
+        <div style="font-weight:700;font-size:0.88rem;margin-bottom:2px;">${b.business_name}</div>
+        <div style="font-size:0.72rem;color:#888;margin-bottom:4px;">${b.account_number}</div>
         <div style="font-size:0.75rem;color:#666;margin-bottom:8px;">${b.city||''} ${b.state||''} · ${b.business_type||''}</div>
         <div style="font-size:0.75rem;font-weight:600;margin-bottom:4px;">Current Zone: <span style="color:${color};">${b.zone}</span></div>
         <div style="font-size:0.75rem;margin-bottom:6px;">Move to:</div>
@@ -4654,14 +4706,19 @@ function zmeRefreshPins(filterZone, filterType) {
     _zmeMap.fitBounds(coords, { padding: [24, 24] });
   }
 
-  // Legend
+  // Legend — checkbox panel matching ZO map
   const legendEl = document.getElementById('zme-legend');
-  legendEl.innerHTML = visibleZones.map(z => {
-    const zi = _zmeZoneNames.indexOf(z);
+  legendEl.innerHTML = _zmeZoneNames.map((z, zi) => {
     const color = ZO_COLORS[zi % ZO_COLORS.length];
+    const checked = _zmeVisibleZones.has(z) ? 'checked' : '';
     const count = _zmeBizList.filter(b => b.zone === z && (!filterType || b.business_type === filterType)).length;
-    return `<span style="display:flex;align-items:center;gap:4px;background:var(--surface2);padding:3px 8px;border-radius:20px;cursor:pointer;" onclick="document.getElementById('zme-filter-zone').value='${z}';zmeFilterZone()">
-      <span style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0;"></span>${z} <span style="color:var(--text3);">(${count})</span></span>`;
+    return `
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:5px;font-size:0.75rem;color:var(--text);" title="${z} — ${count} businesses">
+        <input type="checkbox" id="zme-chk-${z.replace(/[^a-z0-9]/gi,'_')}" ${checked} style="accent-color:${color};cursor:pointer;width:13px;height:13px;flex-shrink:0;" onchange="zmeLegendToggle('${z}', this.checked)">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+        <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">${z}</span>
+        <span style="font-size:0.65rem;color:var(--text3);flex-shrink:0;">${count}</span>
+      </label>`;
   }).join('');
 }
 
