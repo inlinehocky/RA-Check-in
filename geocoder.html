@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Geocoder — RA Parts Solutions</title>
+<style>
+body { font-family: monospace; padding: 20px; background: #111; color: #eee; }
+h2 { color: #7cf; margin-bottom: 4px; }
+p { color: #aaa; margin: 0 0 16px; }
+#progress { color: #7cf; margin-bottom: 8px; font-size: 14px; }
+#log { height: 220px; overflow-y: auto; background: #1a1a1a; border: 1px solid #333;
+        padding: 8px; font-size: 12px; margin-bottom: 12px; }
+.ok { color: #4f4; } .miss { color: #fa4; } .err { color: #f44; }
+#sql-out { width: 100%; height: 300px; background: #1a1a1a; border: 1px solid #444;
+            color: #cfc; font-size: 11px; padding: 8px; }
+button { background: #2a6; color: #fff; border: none; padding: 8px 20px;
+          cursor: pointer; font-size: 14px; border-radius: 4px; margin-right: 8px; }
+button:disabled { background: #555; cursor: not-allowed; }
+#copy-btn { background: #26a; }
+</style>
+</head>
+<body>
+<h2>RA Parts — Geocode Missing Lat/Lng</h2>
+<p>Geocodes 94 active businesses via Nominatim, then outputs UPDATE SQL you can run in Supabase.</p>
+<div id="progress">Ready. Click Start to begin.</div>
+<div id="log"></div>
+<button id="start-btn" onclick="startGeocoding()">▶ Start Geocoding</button>
+<button id="copy-btn" onclick="copySql()" disabled>📋 Copy SQL</button>
+<br><br>
+<textarea id="sql-out" placeholder="SQL will appear here when complete..."></textarea>
+
+<script>
+const businesses = [
+  {
+    "account_number": "80043",
+    "business_name": "ADVANCED AUTO CRAFT",
+    "address": "11452 S FM 730",
+    "city": "AZLE",
+    "state": "TX",
+    "zip": "76020"
+  },
+  {
+    "account_number": "80032",
+    "business_name": "ADVANCED AUTO CRAFT",
+    "address": "11452 S FM 730",
+    "city": "AZLE",
+    "state": "TX",
+    "zip": "76020"
+  },
+  {
+    "account_number": "80014",
+    "business_name": "HILL'S PAINT & BODY",
+    "address": "11452 S FARM TO MARKET 730",
+    "city": "AZLE",
+    "state": "TX",
+    "zip": "76020"
+  },
+  {
+    "account_number": "80048",
+    "business_name": "HILL'S PAINT & BODY",
+    "address": "11452 SOUTH FM730",
+    "city": "AZLE",
+    "state": "TX",
+    "zip": "76020"
+  },
+  {
+    "account_number": "80031",
+    "business_name": "HILL'S PAINT & BODY",
+    "address": "11452 SOUTH FM730",
+    "city": "AZLE",
+    "state": "TX",
+    "zip": "76020"
+  },
+  {
+    "account_number": "8005",
+    "business_name": "SHAY'S AUTOMOTIVE",
+    "address": "11214 S FM 730",
+    "city": "AZLE",
+    "state": "TX",
+    "zip": "76020"
+  },
+  {
+    "account_number": "10030",
+    "business_name": "AUTO COLLISION BODY REPAIR",
+    "address": "1961 E FRANKFORD RD STE 110",
+    "city": "CARROLLTON",
+    "state": "TX",
+    "zip": "75007"
+  },
+  {
+    "account_number": "2027",
+    "business_name": "CARROLLTON CAR KARE",
+    "address": "1400 MAC ARTHUR DR",
+    "city": "CARROLLTON",
+    "state": "TX",
+    "zip": "75007"
+  },
+  {
+    "account_number": "2029",
+    "business_name": "DRIVERS EDGE CARROLLTON",
+    "address": "1401 WAINWRIGHT",
+    "city": "CARROLLTON",
+    "state": "TX",
+    "zip": "75007"
+  },
+  {
+    "account_number": "2065",
+    "business_name": "INTEGRITY 1AUTO",
+    "address": "2016 KELLER SPRINGS RD",
+    "city": "CARROLLTON",
+    "state": "TX",
+    "zip": "75006"
+  },
+  {
+    "account_number": "2054",
+    "business_name": "LU'S JAPANESE AUTO REPAIR",
+    "address": "1817 N BROADWAY ST",
+    "city": "CARROLLTON",
+    "state": "TX",
+    "zip": "75006"
+  },
+  {
+    "account_number": "2002",
+    "business_name": "OLD TOWN AUTOMOTIVE SERVICE",
+    "address": "1005 S BROADWAY ST",
+    "city": "CARROLLTON",
+    "state": "TX",
+    "zip": "75006"
+  },
+  {
+    "account_number": "2059",
+    "business_name": "T&L AUTO SERVICE",
+    "address": "1861 N JOSEY LANE",
+    "city": "CARROLLTON",
+    "state": "TX",
+    "zip": "75006"
+  },
+  {
+    "account_number": "10024",
+    "business_name": "CARSTAR",
+    "address": "5616 N LOWREY ST",
+    "city": "COPPELL",
+    "state": "TX",
+    "zip": "75099"
+  },
+  {
+    "account_number": "5011",
+    "business_name": "FIRESTONE COMPLETE CAR CAR - CORINTH",
+    "address": "4151 FM 2181",
+    "city": "CORINTH",
+    "state": "TX",
+    "zip": "76210"
+  },
+  {
+    "account_number": "4003",
+    "business_name": "AL'S AUTO & TIRE",
+    "address": "2111 FT WORTH AVE",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75211"
+  },
+  {
+    "account_number": "3058",
+    "business_name": "ALL PRO COMPLETE",
+    "address": "10830 ALDER CIR",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75238"
+  },
+  {
+    "account_number": "2074",
+    "business_name": "ASHER AUTO CARE",
+    "address": "2419 INWOOD RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75235"
+  },
+  {
+    "account_number": "2007",
+    "business_name": "CAR CLINIC CENTER",
+    "address": "10707 SHADY TRL",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75220"
+  },
+  {
+    "account_number": "3067",
+    "business_name": "CHRISTIAN BROTHERS",
+    "address": "12124 MCCREE RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75238"
+  },
+  {
+    "account_number": "3070",
+    "business_name": "DALLAS CAR CARE",
+    "address": "10908 GARLAND RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75218"
+  },
+  {
+    "account_number": "1061",
+    "business_name": "DEE'S AUTO GARAGE",
+    "address": "18225 MIDWAY RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75287"
+  },
+  {
+    "account_number": "2106",
+    "business_name": "DTX AUTOMOTIVE",
+    "address": "5417 REDFIELD ST",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75235"
+  },
+  {
+    "account_number": "2089",
+    "business_name": "EURO AUTOMOTIVE",
+    "address": "3421 W NORTHWEST HWY",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75220"
+  },
+  {
+    "account_number": "3078",
+    "business_name": "GODINEZ AUTO REPAIR",
+    "address": "10909 JUPITER RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75218"
+  },
+  {
+    "account_number": "3079",
+    "business_name": "GOMEZ GARAGE",
+    "address": "1528 CENTERVILLE RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75228"
+  },
+  {
+    "account_number": "2056",
+    "business_name": "HANCE'S EUROPEAN",
+    "address": "1850 W MOCKINGBIRD LN",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75235"
+  },
+  {
+    "account_number": "3080",
+    "business_name": "HIGHLANDS AUTO CENTER",
+    "address": "10524 E NORTHWEST HWY",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75238"
+  },
+  {
+    "account_number": "3044",
+    "business_name": "KING AUTO REPAIR & AUTO SALES",
+    "address": "3210 N BUCKNER BLVD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75228"
+  },
+  {
+    "account_number": "3045",
+    "business_name": "LAKEWOOD AUTOMOTIVE",
+    "address": "3325 N BUCKNER BLVD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75228"
+  },
+  {
+    "account_number": "2090",
+    "business_name": "MEINEKE CAR CARE",
+    "address": "3529 WEST NORTHWEST HWY",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75220"
+  },
+  {
+    "account_number": "2013",
+    "business_name": "NEXT GEN TRANSMISSIONS",
+    "address": "11535 REEDER RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75229"
+  },
+  {
+    "account_number": "2102",
+    "business_name": "PARK'S CITIES AUTO CARE",
+    "address": "5020 LEMMON AVE",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75209"
+  },
+  {
+    "account_number": "2085",
+    "business_name": "PEP BOYS",
+    "address": "2992 FOREST LN",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75234"
+  },
+  {
+    "account_number": "3100",
+    "business_name": "SANCHEZ AUTO SERVICE",
+    "address": "10208 GARLAND RD",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75218"
+  },
+  {
+    "account_number": "3052",
+    "business_name": "TOP NOTCH BODY SHOP & MECHANIC",
+    "address": "5021 E GRAND AVE",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75223"
+  },
+  {
+    "account_number": "2076",
+    "business_name": "TRANSMISSIONS & MORE",
+    "address": "2519 GLENDA LN",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75229"
+  },
+  {
+    "account_number": "2062",
+    "business_name": "TROWELL & TURNER AUTOMOTIVE",
+    "address": "1964 REGAL ROW",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75235"
+  },
+  {
+    "account_number": "2084",
+    "business_name": "VALLEY VIEW CAR CARE CENTER",
+    "address": "2931 VALLEY VIEW LN",
+    "city": "DALLAS",
+    "state": "TX",
+    "zip": "75234"
+  },
+  {
+    "account_number": "5006",
+    "business_name": "DONE RIGHT",
+    "address": "3330 E UNIVERSITY",
+    "city": "DENTON",
+    "state": "TX",
+    "zip": "76208"
+  },
+  {
+    "account_number": "16013",
+    "business_name": "MAVIS TIRES & BRAKES",
+    "address": "1880 BRINKER RD",
+    "city": "DENTON",
+    "state": "TX",
+    "zip": "76208"
+  },
+  {
+    "account_number": "5003",
+    "business_name": "PIONEER AUTOMOTIVE",
+    "address": "8010 TEASLEY LN",
+    "city": "DENTON",
+    "state": "TX",
+    "zip": "76210"
+  },
+  {
+    "account_number": "2025",
+    "business_name": "KWIK KAR AUTO",
+    "address": "13303 JOSEY LN",
+    "city": "FARMERS BRANCH",
+    "state": "TX",
+    "zip": "75234"
+  },
+  {
+    "account_number": "2110",
+    "business_name": "DRIVER'S EDGE",
+    "address": "6200 MORRISS RD",
+    "city": "FLOWER MOUND",
+    "state": "TX",
+    "zip": "75028"
+  },
+  {
+    "account_number": "6121",
+    "business_name": "ALL AUTO SERVICE",
+    "address": "1024 ALSTON AVE",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76104"
+  },
+  {
+    "account_number": "8043",
+    "business_name": "FIRESTONE COMPLETE AUTO CARE",
+    "address": "3448 HWY 114 RD",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76177"
+  },
+  {
+    "account_number": "80021",
+    "business_name": "HAWS PAINT & BODY SHOP",
+    "address": "1015 E BELKNAP ST",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76102"
+  },
+  {
+    "account_number": "80033",
+    "business_name": "HAWS PAINT & BODY SHOP",
+    "address": "1015 E BELKNAP ST",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76102"
+  },
+  {
+    "account_number": "6047",
+    "business_name": "JUNIOR'S AUTO REPAIR",
+    "address": "3910 MANSFIELD HWY",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76119"
+  },
+  {
+    "account_number": "80037",
+    "business_name": "MUNDOS BODY SHOP",
+    "address": "2107 N MAIN ST STE 111",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76164"
+  },
+  {
+    "account_number": "80015",
+    "business_name": "MUNDOS BODY SHOP",
+    "address": "2107 N MAIN ST STE 111",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76164"
+  },
+  {
+    "account_number": "80028",
+    "business_name": "MUNDOS BODY SHOP",
+    "address": "2107 N MAIN ST STE 111",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76164"
+  },
+  {
+    "account_number": "80036",
+    "business_name": "NEW EUROPA PAINT & COLLISION",
+    "address": "5416 JACKSBORO HWY",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76114"
+  },
+  {
+    "account_number": "80020",
+    "business_name": "NEW EUROPA PAINT & COLLISION",
+    "address": "5416 JACKSBORO HWY",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76114"
+  },
+  {
+    "account_number": "80018",
+    "business_name": "THE MASTER'S GARAGE",
+    "address": "208 GRAND AVE",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76164"
+  },
+  {
+    "account_number": "80041",
+    "business_name": "WINDUS AUTO COLLISION SPECIALIST",
+    "address": "5951 N MAIN ST",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76179"
+  },
+  {
+    "account_number": "80026",
+    "business_name": "WINDUS AUTO COLLISION SPECIALIST",
+    "address": "5951 N MAIN ST",
+    "city": "FORT WORTH",
+    "state": "TX",
+    "zip": "76179"
+  },
+  {
+    "account_number": "1007",
+    "business_name": "EUROPEAN AUTO CARE",
+    "address": "4900 PRESTON RD SUITE 105B",
+    "city": "FRISCO",
+    "state": "TX",
+    "zip": "75034"
+  },
+  {
+    "account_number": "1066",
+    "business_name": "EUROPEAN AUTO CARE",
+    "address": "4900 PRESTON RD STE 105B",
+    "city": "FRISCO",
+    "state": "TX",
+    "zip": "75034"
+  },
+  {
+    "account_number": "9028",
+    "business_name": "FIRESTONE - FT WORTH",
+    "address": "6233 GRANDBURY RD",
+    "city": "FT WORTH",
+    "state": "TX",
+    "zip": "76133"
+  },
+  {
+    "account_number": "30045",
+    "business_name": "AMERICA'S AUTO PAINTING & COLLISION REPAIR",
+    "address": "2739 S GARLAND AVE STE B",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75041"
+  },
+  {
+    "account_number": "3061",
+    "business_name": "AUTO TECH USA",
+    "address": "3626 DIVIDEND DR",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75042"
+  },
+  {
+    "account_number": "3077",
+    "business_name": "GENARO QUALITY AUTO CARE",
+    "address": "3009 LINCOLN CT",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75041"
+  },
+  {
+    "account_number": "3083",
+    "business_name": "JP EURO / JP IMPORTZ",
+    "address": "3517 SECURITY ST",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75042"
+  },
+  {
+    "account_number": "30031",
+    "business_name": "LAPENNA COLLISION SERVICE",
+    "address": "430 FOREST GATE DR",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75042"
+  },
+  {
+    "account_number": "30046",
+    "business_name": "LEGACY AUTO BODY SHOP",
+    "address": "2636 NATIONAL CIRCLE",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75041"
+  },
+  {
+    "account_number": "3095",
+    "business_name": "ONLY 4 COMPLETE AUTO CARE",
+    "address": "10222 GARLAND RD",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75218"
+  },
+  {
+    "account_number": "3049",
+    "business_name": "PT AUTO REPAIR",
+    "address": "3945 FOREST LN",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75042"
+  },
+  {
+    "account_number": "3051",
+    "business_name": "THE TRANSMISSION SHOP",
+    "address": "1403 FOREST LN",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75042"
+  },
+  {
+    "account_number": "3105",
+    "business_name": "UNLIMITED AUTO REPAIR",
+    "address": "11504 GARLAND RD",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75218"
+  },
+  {
+    "account_number": "3054",
+    "business_name": "WONDER AUTO SERVICE",
+    "address": "1861 NORTH JUPITER RD",
+    "city": "GARLAND",
+    "state": "TX",
+    "zip": "75042"
+  },
+  {
+    "account_number": "4034",
+    "business_name": "AUTOSCOPE REPAIR",
+    "address": "2125 W PIONEER PKWY SUITE E2",
+    "city": "GRAND PRAIRIE",
+    "state": "TX",
+    "zip": "75051"
+  },
+  {
+    "account_number": "4043",
+    "business_name": "C.S. LEE TIRE AND SERVICE",
+    "address": "2810 W I-20",
+    "city": "GRAND PRAIRIE",
+    "state": "TX",
+    "zip": "75052"
+  },
+  {
+    "account_number": "4035",
+    "business_name": "DEVINE MIRACLE AUTO REPAIR",
+    "address": "2125 W PIONEER PKWY SUITE F2",
+    "city": "GRAND PRAIRIE",
+    "state": "TX",
+    "zip": "75057"
+  },
+  {
+    "account_number": "80046",
+    "business_name": "CAMPBELLS AUTO BODY",
+    "address": "3313 EAST HWY 377",
+    "city": "GRANDBURY",
+    "state": "TX",
+    "zip": "76049"
+  },
+  {
+    "account_number": "7100",
+    "business_name": "AMP AUTO REPAIR",
+    "address": "4100 BELKNAP ST",
+    "city": "HALTOM CITY",
+    "state": "TX",
+    "zip": "76111"
+  },
+  {
+    "account_number": "20002",
+    "business_name": "ACE CUSTOMS",
+    "address": "2100 NORTH LOOP 12",
+    "city": "IRVING",
+    "state": "TX",
+    "zip": "75061"
+  },
+  {
+    "account_number": "2100",
+    "business_name": "ALONZO'S AUTO REPAIR",
+    "address": "421 E PIONEER DR",
+    "city": "IRVING",
+    "state": "TX",
+    "zip": "75061"
+  },
+  {
+    "account_number": "2109",
+    "business_name": "CHRISTIAN BROTHERS AUTOMOTIVE",
+    "address": "600 VALLEY RANCH PKWY SOUTH",
+    "city": "IRVING",
+    "state": "TX",
+    "zip": "75063"
+  },
+  {
+    "account_number": "2105",
+    "business_name": "FIRESTONE COMPLETE AUTO CARE",
+    "address": "5410 N MACARTHUR BLVD",
+    "city": "IRVING",
+    "state": "TX",
+    "zip": "75038"
+  },
+  {
+    "account_number": "2009",
+    "business_name": "JOHNNY'S AUTOMOTIVE",
+    "address": "1101 N BRITAIN RD",
+    "city": "IRVING",
+    "state": "TX",
+    "zip": "75061"
+  },
+  {
+    "account_number": "20014",
+    "business_name": "ON THE ROAD GARAGE",
+    "address": "1500 N. LOOP12",
+    "city": "IRVING",
+    "state": "TX",
+    "zip": "75061"
+  },
+  {
+    "account_number": "2094",
+    "business_name": "TIRE ZONE",
+    "address": "400 E PIONEER DR",
+    "city": "IRVING",
+    "state": "TX",
+    "zip": "75061"
+  },
+  {
+    "account_number": "2069",
+    "business_name": "ANDERSON'S AUTO REPAIR",
+    "address": "202 W. HUNDLEY",
+    "city": "LAKE DALLAS",
+    "state": "TX",
+    "zip": "75065"
+  },
+  {
+    "account_number": "2097",
+    "business_name": "MIKE'S AUTO CENTER",
+    "address": "413 EAST SH 121 BUSINESS",
+    "city": "LEWISVILLE",
+    "state": "TX",
+    "zip": "75057"
+  },
+  {
+    "account_number": "2091",
+    "business_name": "NORTH TEXAS AUTOWERKS AKA D & S",
+    "address": "361 E STATE HWY 121",
+    "city": "LEWISVILLE",
+    "state": "TX",
+    "zip": "75057"
+  },
+  {
+    "account_number": "3075",
+    "business_name": "FIRESTONE COMPLETE AUTO CARE",
+    "address": "3501 GUS THOMASSON RD",
+    "city": "MESQUITE",
+    "state": "TX",
+    "zip": "75150"
+  },
+  {
+    "account_number": "1069",
+    "business_name": "INTEGRITY AUTOMOTIVE",
+    "address": "4050 WEST 15TH STREET",
+    "city": "PLANO",
+    "state": "TX",
+    "zip": "75096"
+  },
+  {
+    "account_number": "1029",
+    "business_name": "SAM'S AUTO CARE",
+    "address": "4006 W. PLANO PKWY SUITE 270",
+    "city": "PLANO",
+    "state": "TX",
+    "zip": "75093"
+  },
+  {
+    "account_number": "1098",
+    "business_name": "PROVIDENCE AUTOMOTIVE",
+    "address": "2761 MAIN ST",
+    "city": "PROVIDENCE VILLAGE",
+    "state": "TX",
+    "zip": "76227"
+  },
+  {
+    "account_number": "3103",
+    "business_name": "THE STAR AUTO SERVICE",
+    "address": "900 E BELT LINE RD",
+    "city": "RICHARDSON",
+    "state": "TX",
+    "zip": "75081"
+  },
+  {
+    "account_number": "80010",
+    "business_name": "RIVER OAKS COLLISION CENTER",
+    "address": "1012 ROBERTS CUT OFF",
+    "city": "RIVER OAKS",
+    "state": "TX",
+    "zip": "76114"
+  },
+  {
+    "account_number": "10013",
+    "business_name": "G & G BODY SHOP",
+    "address": "2580 FM 544",
+    "city": "THE COLONY",
+    "state": "TX",
+    "zip": "75056"
+  },
+  {
+    "account_number": "1071",
+    "business_name": "MIDAS/SPEEDEE OIL CHANGE",
+    "address": "4177 MAIN ST STE 100",
+    "city": "THE COLONY",
+    "state": "TX",
+    "zip": "75056"
+  }
+];
+
+const delay = ms => new Promise(r => setTimeout(r, ms));
+
+function log(msg, cls='') {
+  const d = document.getElementById('log');
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  d.appendChild(line);
+  d.scrollTop = d.scrollHeight;
+}
+
+async function geocone(b) {
+  const q = encodeURIComponent(`${b.address}, ${b.city}, ${b.state} ${b.zip}, USA`);
+  const url = `https://nominatim.openstreetmap.org/search?q=${q}&format=json&limit=1&countrycodes=us`;
+  const resp = await fetch(url, { headers: { 'Accept-Language': 'en', 'User-Agent': 'RAPartsGeocoder/1.0' } });
+  const data = await resp.json();
+  if (data && data.length > 0) {
+    return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon), matched: data[0].display_name };
+  }
+  return null;
+}
+
+async function startGeocoding() {
+  document.getElementById('start-btn').disabled = true;
+  const results = [];
+  const missed = [];
+
+  for (let i = 0; i < businesses.length; i++) {
+    const b = businesses[i];
+    document.getElementById('progress').textContent = `Processing ${i+1}/${businesses.length}: ${b.business_name}`;
+    try {
+      const r = await geocone(b);
+      if (r) {
+        results.push({ ...b, lat: r.lat, lng: r.lng });
+        log(`✓ ${b.account_number.padEnd(8)} ${r.lat.toFixed(6)}, ${r.lng.toFixed(6)}  ${b.business_name}`, 'ok');
+      } else {
+        missed.push(b);
+        log(`✗ ${b.account_number.padEnd(8)} NO MATCH — ${b.address}, ${b.city}`, 'miss');
+      }
+    } catch(e) {
+      missed.push(b);
+      log(`! ${b.account_number.padEnd(8)} ERROR: ${e.message}`, 'err');
+    }
+    await delay(1100); // Nominatim rate limit: 1 req/sec
+  }
+
+  document.getElementById('progress').textContent =
+    `Done: ${results.length}/${businesses.length} geocoded. ${missed.length} no match.`;
+
+  // Build SQL
+  const lines = [
+    `-- Lat/Lng UPDATE for ${results.length} businesses`,
+    `-- Generated: ${new Date().toISOString()}`,
+    `-- ${missed.length} addresses could not be geocoded (listed at bottom)`,
+    ``,
+    `-- Apply to BOTH dev (zzmvtvyksfyvbokhqpwf) and prod (kxchucwedudvlqzszqpp)`,
+    ``
+  ];
+
+  for (const r of results) {
+    lines.push(`UPDATE businesses SET latitude = ${r.lat}, longitude = ${r.lng} WHERE account_number = '${r.account_number}';`);
+  }
+
+  if (missed.length) {
+    lines.push(``, `-- Could NOT geocode (${missed.length} businesses):`);
+    for (const m of missed) {
+      lines.push(`-- ${m.account_number.padEnd(8)} ${m.business_name} | ${m.address}, ${m.city}, ${m.state} ${m.zip}`);
+    }
+  }
+
+  document.getElementById('sql-out').value = lines.join('\n');
+  document.getElementById('copy-btn').disabled = false;
+}
+
+function copySql() {
+  const ta = document.getElementById('sql-out');
+  ta.select();
+  document.execCommand('copy');
+  document.getElementById('copy-btn').textContent = '✓ Copied!';
+  setTimeout(() => document.getElementById('copy-btn').textContent = '📋 Copy SQL', 2000);
+}
+</script>
+</body>
+</html>
