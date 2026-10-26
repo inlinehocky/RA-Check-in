@@ -867,19 +867,19 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <!-- Status / results -->
       <div id="zo-status" class="card" style="display:none;margin-bottom:16px;"></div>
       <!-- Map preview -->
-      <div id="zo-map-wrap" style="display:none;margin-bottom:16px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
-        <div style="display:flex;flex-direction:row;height:380px;">
-          <!-- Zone Legend -->
-          <div id="zo-legend-panel" style="width:155px;min-width:155px;background:var(--surface2);border-right:1px solid var(--border2);display:flex;flex-direction:column;flex-shrink:0;">
-            <div style="padding:10px 8px 6px;font-size:0.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border-bottom:1px solid var(--border2);flex-shrink:0;">Zones</div>
-            <div id="zo-legend-items" style="flex:1;overflow-y:auto;padding:6px 8px;display:flex;flex-direction:column;gap:3px;"></div>
-            <div style="padding:6px 8px;border-top:1px solid var(--border2);display:flex;gap:4px;flex-shrink:0;">
+      <div id="zo-map-wrap" style="display:none;margin-bottom:16px;">
+        <div style="position:relative;height:380px;border-radius:12px;overflow:hidden;border:1px solid var(--border2);">
+          <!-- Map fills the full container -->
+          <div id="zo-map" style="position:absolute;top:0;left:0;right:0;bottom:0;"></div>
+          <!-- Zone Legend overlaid on the left -->
+          <div id="zo-legend-panel" style="position:absolute;top:8px;left:8px;bottom:8px;width:150px;z-index:1000;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.18);display:flex;flex-direction:column;overflow:hidden;">
+            <div style="padding:8px 8px 5px;font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);border-bottom:1px solid var(--border2);flex-shrink:0;">Zones</div>
+            <div id="zo-legend-items" style="flex:1;overflow-y:auto;padding:5px 6px;display:flex;flex-direction:column;gap:2px;"></div>
+            <div style="padding:5px 6px;border-top:1px solid var(--border2);display:flex;gap:4px;flex-shrink:0;">
               <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(true)">All</button>
               <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(false)">None</button>
             </div>
           </div>
-          <!-- Map -->
-          <div id="zo-map" style="flex:1;min-width:0;height:100%;"></div>
         </div>
       </div>
       <!-- Proposed assignments table -->
@@ -2715,12 +2715,14 @@ async function renderReportButtons(filteredList) {
     grouped[key].zoneValues.push(zv);
   });
 
-  // Fetch active biz accounts once before loop (await can't be inside forEach)
+  // Fetch active, non-DNV biz accounts once before loop (await can't be inside forEach)
   let activeBizAccts;
   if (allBusinesses.length) {
-    activeBizAccts = new Set(allBusinesses.filter(b => b.active_ind !== 0).map(b => b.account_number));
+    activeBizAccts = new Set(
+      allBusinesses.filter(b => b.active_ind !== 0 && !b.do_not_visit).map(b => b.account_number)
+    );
   } else {
-    const { data: activeBiz } = await db.from('businesses').select('account_number').eq('active_ind', 1);
+    const { data: activeBiz } = await db.from('businesses').select('account_number').eq('active_ind', 1).eq('do_not_visit', false);
     activeBizAccts = new Set((activeBiz || []).map(b => b.account_number));
   }
 
@@ -2731,7 +2733,7 @@ async function renderReportButtons(filteredList) {
         !e.used_in_report_at &&
         e.business_type === t &&
         e.zone && group.zoneValues.includes(e.zone) &&
-        (!e.account_number || activeBizAccts.has(e.account_number))
+        e.account_number && activeBizAccts.has(e.account_number)
       ).length;
       const btn = document.createElement('div'); btn.className = 'report-btn';
       btn.innerHTML = `<div class="report-btn-type" style="color:${t==='Mechanical'?'var(--blue)':'var(--red)'}">${t}</div>
@@ -2763,13 +2765,13 @@ async function generateReport(type, zone, count, available) {
   }
 
   const { data: pool } = await db.from('entries')
-    .select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone,active_ind,latitude,longitude)')
+    .select('*, businesses:account_number(address,city,state,zip,phone,contact_name,business_type,zone,active_ind,do_not_visit,latitude,longitude)')
     .is('used_in_report_at', null)
     .eq('business_type', type)
     .in('zone', zone.zoneValues);
 
-  // Exclude entries for inactive businesses
-  const activePool = (pool || []).filter(e => e.businesses?.active_ind !== 0);
+  // Exclude entries for inactive or do-not-visit businesses
+  const activePool = (pool || []).filter(e => e.businesses?.active_ind !== 0 && !e.businesses?.do_not_visit);
   if (!activePool.length) { showToast('No unsent entries for active businesses in this report'); return; }
 
   console.log('generateReport:', type, 'freshCount=', freshCount, 'pool=', activePool.length, 'useCount=', useCount);
@@ -4414,25 +4416,19 @@ function renderZoLegend(zoneNames) {
     const color = ZO_COLORS[zi % ZO_COLORS.length];
     const checked = _zoVisibleZones.has(z) ? 'checked' : '';
     const count = _zoProposed.filter(b => b.zone === z).length;
-    // Use data attributes and a delegated click to avoid double-fire from label+input
     return `
-      <div style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:5px;font-size:0.75rem;color:var(--text);"
-           title="${z} — ${count} businesses" onclick="zoLegendToggle('${z}')">
-        <input type="checkbox" id="zo-chk-${z}" ${checked} style="accent-color:${color};cursor:pointer;width:13px;height:13px;flex-shrink:0;" onclick="event.stopPropagation();zoLegendToggle('${z}')">
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;pointer-events:none;"></span>
-        <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;pointer-events:none;">${z}</span>
-        <span style="font-size:0.65rem;color:var(--text3);flex-shrink:0;pointer-events:none;">${count}</span>
-      </div>`;
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:5px;font-size:0.75rem;color:var(--text);" title="${z} — ${count} businesses">
+        <input type="checkbox" id="zo-chk-${z}" ${checked} style="accent-color:${color};cursor:pointer;width:13px;height:13px;flex-shrink:0;" onchange="zoLegendToggle('${z}', this.checked)">
+        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></span>
+        <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;">${z}</span>
+        <span style="font-size:0.65rem;color:var(--text3);flex-shrink:0;">${count}</span>
+      </label>`;
   }).join('');
 }
 
-function zoLegendToggle(zoneName) {
-  const cb = document.getElementById('zo-chk-' + zoneName);
-  if (!cb) return;
-  // Toggle the state
-  const nowVisible = !_zoVisibleZones.has(zoneName);
-  if (nowVisible) { _zoVisibleZones.add(zoneName); cb.checked = true; }
-  else { _zoVisibleZones.delete(zoneName); cb.checked = false; }
+function zoLegendToggle(zoneName, visible) {
+  if (visible) { _zoVisibleZones.add(zoneName); }
+  else { _zoVisibleZones.delete(zoneName); }
   refreshZoMapPins();
 }
 
