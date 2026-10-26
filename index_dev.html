@@ -4222,6 +4222,37 @@ const ZO_COLORS = [
 async function renderZoneOptimizerTab() {
   resetZoneOptimizer(true);
   await loadZoneSnapshots();
+  await loadZoInitialMap();
+}
+
+async function loadZoInitialMap() {
+  // Show existing businesses on the map when the tab first opens,
+  // using their current zone assignments (active + non-DNV + has coords + has zone).
+  const { data: bizList } = await db.from('businesses')
+    .select('account_number, business_name, address, city, state, zone, latitude, longitude, business_type')
+    .eq('active_ind', 1)
+    .eq('do_not_visit', false)
+    .not('latitude', 'is', null)
+    .not('longitude', 'is', null)
+    .not('zone', 'is', null);
+
+  if (!bizList || !bizList.length) return;
+
+  // Populate _zoProposed with current zone assignments so renderZoMap / legend work normally
+  _zoProposed = bizList.map(b => ({
+    account_number: b.account_number,
+    business_name:  b.business_name,
+    address:        b.address,
+    city:           b.city,
+    state:          b.state,
+    zone:           b.zone,
+    business_type:  b.business_type,
+    lat:            parseFloat(b.latitude),
+    lng:            parseFloat(b.longitude),
+    _existing:      true   // flag so Save Zones can skip these
+  }));
+
+  renderZoMap();
 }
 
 function resetZoneOptimizer(silent) {
