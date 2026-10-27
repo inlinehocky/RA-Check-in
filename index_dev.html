@@ -1470,7 +1470,7 @@ async function renderZonesTab() {
   const c = document.getElementById('zones-list'); c.innerHTML = '';
 
   // Pull distinct zone values from businesses table
-  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
+  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1).limit(10000);
   const distinctZones = [...new Set((bizZoneData||[]).map(b=>b.zone).filter(Boolean))].sort();
 
   if (!distinctZones.length) { c.innerHTML = '<div class="empty-state">No zones found on businesses yet.</div>'; }
@@ -1539,7 +1539,7 @@ async function populateZoneDropdown(selectId) {
   const cur = sel.value;
   while (sel.options.length > 1) sel.remove(1);
   // Pull distinct zone values from businesses table
-  const { data } = await db.from('businesses').select('zone').not('zone', 'is', null).eq('active_ind', 1);
+  const { data } = await db.from('businesses').select('zone').not('zone', 'is', null).eq('active_ind', 1).limit(10000);
   const distinctZones = [...new Set((data || []).map(b => b.zone).filter(Boolean))].sort();
   distinctZones.forEach(zv => {
     const o = document.createElement('option');
@@ -1620,7 +1620,7 @@ async function toggleNewBizPanel() {
     const nbZoneSel = document.getElementById('nb-zone-select');
     nbZoneSel.innerHTML = '<option value="">— Select or type below —</option>';
     document.getElementById('nb-zone-free').value = '';
-    const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1);
+    const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1).limit(10000);
     const zones = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
     zones.forEach(z => {
       const o = document.createElement('option');
@@ -1674,7 +1674,7 @@ async function detectEmployeeZoneFromDB() {
 
 async function getNextAccountNumber() {
   // Fetch all account numbers fresh — avoid any client-side caching
-  const { data } = await db.from('businesses').select('account_number').order('account_number', { ascending: false });
+  const { data } = await db.from('businesses').select('account_number').order('account_number', { ascending: false }).limit(10000);
   const nums = (data || []).map(b => {
     const m = (b.account_number || '').match(/(\d+)$/);
     return m ? parseInt(m[1]) : 0;
@@ -2705,7 +2705,7 @@ async function renderReportButtons(filteredList) {
   const types = ['Mechanical','Collision'];
 
   // Pull distinct zones from businesses table
-  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null);
+  const { data: bizZoneData } = await db.from('businesses').select('zone').not('zone','is',null).limit(10000);
   const distinctZones = [...new Set((bizZoneData||[]).map(b=>b.zone).filter(Boolean))].sort();
 
   if (!distinctZones.length) {
@@ -2725,26 +2725,62 @@ async function renderReportButtons(filteredList) {
     grouped[key].zoneValues.push(zv);
   });
 
-  // Fetch active, non-DNV biz accounts once before loop (await can't be inside forEach)
-  let activeBizAccts;
-  if (allBusinesses.length) {
-    activeBizAccts = new Set(
-      allBusinesses.filter(b => b.active_ind !== 0 && !b.do_not_visit).map(b => b.account_number)
-    );
-  } else {
-    const { data: activeBiz } = await db.from('businesses').select('account_number').eq('active_ind', 1).eq('do_not_visit', false);
-    activeBizAccts = new Set((activeBiz || []).map(b => b.account_number));
+  // Count unsent entries per region+type via DB — avoids PostgREST 1000-row cap entirely
+  // Run all count queries in parallel
+  const regionKeys = Object.keys(grouped);
+  const countPromises = [];
+  for (const key of regionKeys) {
+    const group = grouped[key];
+    for (const t of types) {
+      countPromises.push(
+        db.rpc('count_unsent_entries', { p_zone_prefix: key + '_%', p_business_type: t })
+          .then(({ data, error }) => ({ key, t, available: error ? 0 : (data ?? 0) }))
+      );
+    }
+  }
+  // Fallback: if RPC not available, paginate manually
+  let availableCounts;
+  try {
+    const results = await Promise.all(countPromises);
+    availableCounts = {};
+    results.forEach(r => { availableCounts[r.key + '|' + r.t] = r.available; });
+    // Quick sanity: if all zeros, RPC probably doesn't exist — fall through to paginated fetch
+    if (results.every(r => r.available === 0)) throw new Error('rpc_zero');
+  } catch(e) {
+    // Paginate businesses and entries to avoid the 1000-row cap
+    let allActiveBiz = [], page = 0, done = false;
+    while (!done) {
+      const { data } = await db.from('businesses').select('account_number').eq('active_ind', 1).eq('do_not_visit', false).range(page * 1000, (page + 1) * 1000 - 1);
+      allActiveBiz = allActiveBiz.concat(data || []);
+      done = !data || data.length < 1000;
+      page++;
+    }
+    const activeBizAccts = new Set(allActiveBiz.map(b => b.account_number));
+
+    let allUnsent = []; page = 0; done = false;
+    while (!done) {
+      const { data } = await db.from('entries').select('account_number, zone, business_type').is('used_in_report_at', null).range(page * 1000, (page + 1) * 1000 - 1);
+      allUnsent = allUnsent.concat(data || []);
+      done = !data || data.length < 1000;
+      page++;
+    }
+
+    availableCounts = {};
+    for (const key of regionKeys) {
+      for (const t of types) {
+        availableCounts[key + '|' + t] = allUnsent.filter(e =>
+          e.business_type === t &&
+          e.zone && e.zone.toUpperCase().startsWith(key + '_') &&
+          activeBizAccts.has(e.account_number)
+        ).length;
+      }
+    }
   }
 
   Object.values(grouped).sort((a,b)=>a.zone_name.localeCompare(b.zone_name)).forEach(group => {
     types.forEach(t => {
       const count = reportSettings[t] || (t==='Mechanical'?8:20);
-      const available = allEntries.filter(e =>
-        !e.used_in_report_at &&
-        e.business_type === t &&
-        e.zone && group.zoneValues.includes(e.zone) &&
-        e.account_number && activeBizAccts.has(e.account_number)
-      ).length;
+      const available = availableCounts[group.zone_key + '|' + t] ?? 0;
       const btn = document.createElement('div'); btn.className = 'report-btn';
       btn.innerHTML = `<div class="report-btn-type" style="color:${t==='Mechanical'?'var(--blue)':'var(--red)'}">${t}</div>
         <div class="report-btn-zone">${group.zone_name}</div>
@@ -2995,7 +3031,7 @@ async function importEntriesFile(e) {
 
   if (!rows.length) { showToast('No data found in file', true); return; }
 
-  const { data: bizList } = await db.from('businesses').select('account_number, business_type, zone');
+  const { data: bizList } = await db.from('businesses').select('account_number, business_type, zone').limit(10000);
   const bizMap = {};
   (bizList || []).forEach(b => { bizMap[String(b.account_number)] = b; });
 
