@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RA Parts Solutions</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;1,9..144,300&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -23,7 +23,7 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 body{background:var(--bg);color:var(--text);font-family:'Plus Jakarta Sans',sans-serif;min-height:100vh;
   background-image:radial-gradient(ellipse 80% 40% at 50% -10%,rgba(240,180,41,0.07) 0%,transparent 70%);}
-.screen{display:none;min-height:100vh;}
+.screen{display:none;height:100vh;overflow:hidden;}
 .screen.active{display:flex;flex-direction:column;}
 
 /* LOADING */
@@ -77,9 +77,10 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 .nav-tab:hover{color:var(--text);}
 .nav-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
 .tab-pane{display:none;}
-.tab-pane.active{display:block;animation:fadeUp 0.3s ease;}
+.tab-pane.active{display:flex;flex-direction:column;animation:fadeUp 0.3s ease;flex:1;overflow-y:hidden;}
 .tab-pane.map-pane.active{display:flex;flex-direction:column;}
-.tab-scroll{padding:24px 20px;max-width:900px;margin:0 auto;width:100%;}
+.tab-scroll{padding:24px 20px;max-width:900px;margin:0 auto;width:100%;flex:1;overflow-y:auto;}
+#tab-reports .tab-scroll{padding-top:0 !important;}
 
 /* CARDS */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin-bottom:18px;}
@@ -1049,6 +1050,43 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       </div>
 
     </div>
+
+  <div class="tab-pane" id="tab-reports">
+    <div class="tab-scroll" style="padding-top:0;">
+      <!-- Month nav row -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div class="card-title">📈 Visit Reports</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button class="btn btn-outline" id="rpt-prev-month" onclick="rptChangeMonth(-1)" style="padding:4px 12px;font-size:0.8rem;">‹</button>
+          <div id="rpt-month-label" style="font-size:0.88rem;font-weight:700;color:var(--gold);min-width:120px;text-align:center;"></div>
+          <button class="btn btn-outline" id="rpt-next-month" onclick="rptChangeMonth(1)" style="padding:4px 12px;font-size:0.8rem;">›</button>
+        </div>
+      </div>
+
+      <!-- Calendar grid -->
+      <div class="card" style="padding:10px;">
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;">
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">SUN</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">MON</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">TUE</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">WED</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">THU</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">FRI</div>
+          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">SAT</div>
+        </div>
+        <div id="rpt-calendar-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+      </div>
+
+      <!-- Day detail panel -->
+      <div id="rpt-day-detail" style="display:none;margin-top:8px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+          <div id="rpt-detail-date" style="font-size:0.92rem;font-weight:700;color:var(--text);"></div>
+          <button onclick="document.getElementById('rpt-day-detail').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:1.1rem;cursor:pointer;padding:0 4px;">✕</button>
+        </div>
+        <div id="rpt-detail-body"></div>
+      </div>
+    </div>
+
   </div>
 
 </div>
@@ -1411,7 +1449,7 @@ async function ensureSession() {
 function buildNav() {
   const nav = document.getElementById('nav-tabs'); nav.innerHTML = '';
   const tabs = currentUser.role === 'owner'
-    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones & Regions'],['tab-settings','⚙️ Settings'],['tab-partsnow','🔧 PartsNow'],['tab-zone-optimizer','🗂️ Zone Optimizer'],['tab-help','❓ Help']]
+    ? [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-all-entries','📊 All Entries'],['tab-businesses','🏢 Businesses'],['tab-users','👥 Employees'],['tab-questions','❓ Questions'],['tab-zones','📍 Zones & Regions'],['tab-settings','⚙️ Settings'],['tab-partsnow','🔧 PartsNow'],['tab-zone-optimizer','🗂️ Zone Optimizer'],['tab-reports','📈 Reports'],['tab-help','❓ Help']]
     : [['tab-entry','📋 New Entry'],['tab-map','🗺️ Route Map'],['tab-help','❓ Help']];
   tabs.forEach(([id, label]) => {
     const b = document.createElement('div');
@@ -1453,6 +1491,7 @@ async function showTab(id) {
   if (id === 'tab-settings') await renderSettingsTab();
   if (id === 'tab-partsnow') await renderPartsNowTab();
   if (id === 'tab-zone-optimizer') await renderZoneOptimizerTab();
+  if (id === 'tab-reports') await renderReportsTab();
   if (id === 'tab-help') {
     const ownerSection = document.getElementById('help-owner-section');
     if (ownerSection) ownerSection.style.display = currentUser?.role === 'owner' ? '' : 'none';
@@ -4482,7 +4521,7 @@ function renderZoMap() {
       maxZoom: 19
     }).addTo(_zoMap);
     _zoLayerGroup = L.layerGroup().addTo(_zoMap);
-    refreshZoMapPins();
+    refreshZoMapPins(true);
   }, 80);
 }
 
@@ -4518,7 +4557,7 @@ function zoLegendSelectAll(selectAll) {
   refreshZoMapPins();
 }
 
-function refreshZoMapPins() {
+function refreshZoMapPins(fitView) {
   if (!_zoMap || !_zoLayerGroup) return;
   _zoLayerGroup.clearLayers();
   const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
@@ -4532,9 +4571,11 @@ function refreshZoMapPins() {
       .bindPopup(`<b>${b.business_name}</b><br><span style="font-size:0.72rem;color:#888;">${b.account_number}</span><br>${b.zone}<br>${b.city || ''}`);
     _zoLayerGroup.addLayer(marker);
   });
-  // Fit bounds to all proposed points (not just visible) so panning context is preserved
-  const allCoords = _zoProposed.map(b => [b.lat, b.lng]);
-  if (visible.length && allCoords.length) _zoMap.fitBounds(allCoords, { padding: [24, 24] });
+  // Only fit bounds on initial load — preserve user's zoom/pan on subsequent refreshes
+  if (fitView) {
+    const allCoords = _zoProposed.map(b => [b.lat, b.lng]);
+    if (visible.length && allCoords.length) _zoMap.fitBounds(allCoords, { padding: [24, 24] });
+  }
 }
 
 function renderZoResults(prefix, numZones, total) {
@@ -4654,10 +4695,10 @@ async function loadZoneMapEditor() {
         maxZoom: 19
       }).addTo(_zmeMap);
       _zmeLayerGroup = L.layerGroup().addTo(_zmeMap);
-      zmeRefreshPins();
+      zmeRefreshPins(null, null, true); // fitView=true on initial load only
     }, 80);
   } else {
-    zmeRefreshPins();
+    zmeRefreshPins(null, null, true); // fitView=true on reload
   }
 }
 
@@ -4680,7 +4721,7 @@ function zmeApplyFilters() {
   zmeRefreshPins(filterZone, filterType);
 }
 
-function zmeRefreshPins(filterZone, filterType) {
+function zmeRefreshPins(filterZone, filterType, fitView) {
   if (!_zmeMap || !_zmeLayerGroup) return;
   _zmeLayerGroup.clearLayers();
 
@@ -4716,8 +4757,8 @@ function zmeRefreshPins(filterZone, filterType) {
     rendered++;
   });
 
-  // Fit bounds if showing all
-  if (!filterZone && !filterType && rendered) {
+  // Only fit bounds on initial load — preserve user's zoom/pan on subsequent refreshes
+  if (fitView && rendered) {
     const coords = _zmeBizList.map(b => [parseFloat(b.latitude), parseFloat(b.longitude)]);
     _zmeMap.fitBounds(coords, { padding: [24, 24] });
   }
@@ -5345,6 +5386,171 @@ window.showTab = async function(id) {
   await _origShowTab(id);
   setTimeout(injectInfoIcons, 100);
 };
+
+
+// ===== REPORTS TAB =====
+window._rptYear = null;
+window._rptMonth = null; // 0-indexed
+
+// Zone color palette — cycles for any number of zones
+const RPT_ZONE_COLORS = [
+  '#f0b429','#00c9a7','#60a5fa','#ff5c5c','#a78bfa','#fb923c','#34d399','#f472b6',
+  '#facc15','#38bdf8','#f87171','#4ade80','#c084fc','#fb7185','#2dd4bf','#e879f9'
+];
+const _rptZoneColorMap = {};
+function rptZoneColor(zone) {
+  if (!_rptZoneColorMap[zone]) {
+    const keys = Object.keys(_rptZoneColorMap);
+    _rptZoneColorMap[zone] = RPT_ZONE_COLORS[keys.length % RPT_ZONE_COLORS.length];
+  }
+  return _rptZoneColorMap[zone];
+}
+
+// Parse entry_date — handles "Jun 2, 2026", "6/2/2026", "06/02/2026"
+function rptParseDate(str) {
+  if (!str) return null;
+  // Try ISO
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) return new Date(str + 'T00:00:00');
+  // Try slash MM/DD/YYYY
+  const slash = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash) return new Date(+slash[3], +slash[1]-1, +slash[2]);
+  // Try "Mon D, YYYY" or "Mon DD, YYYY"
+  const d = new Date(str);
+  if (!isNaN(d)) return d;
+  return null;
+}
+
+async function renderReportsTab() {
+  const now = new Date();
+  if (window._rptYear === null) { window._rptYear = now.getFullYear(); window._rptMonth = now.getMonth(); }
+  await rptRenderCalendar();
+}
+
+function rptChangeMonth(delta) {
+  window._rptMonth += delta;
+  if (window._rptMonth < 0)  { window._rptMonth = 11; window._rptYear--; }
+  if (window._rptMonth > 11) { window._rptMonth = 0;  window._rptYear++; }
+  rptRenderCalendar();
+}
+
+async function rptRenderCalendar() {
+  const year = window._rptYear, month = window._rptMonth;
+  const label = new Date(year, month, 1).toLocaleDateString('en-US', { month:'long', year:'numeric' });
+  document.getElementById('rpt-month-label').textContent = label;
+  document.getElementById('rpt-day-detail').style.display = 'none';
+
+  const grid = document.getElementById('rpt-calendar-grid');
+  grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--text3);font-size:0.82rem;">Loading…</div>';
+
+  // Fetch all entries for this month
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month + 1, 0);
+  // entry_date is stored as "Jun 2, 2026" style — fetch all and filter client-side
+  // We paginate to avoid the 1000-row cap
+  let all = [], page = 0, done = false;
+  while (!done) {
+    const { data } = await db.from('entries')
+      .select('entry_date, zone, account_number')
+      .not('zone', 'is', null)
+      .range(page * 1000, (page + 1) * 1000 - 1);
+    all = all.concat(data || []);
+    done = !data || data.length < 1000;
+    page++;
+  }
+
+  // Build a map: "YYYY-M-D" -> { zone -> count }
+  const dayMap = {};
+  all.forEach(e => {
+    const d = rptParseDate(e.entry_date);
+    if (!d) return;
+    if (d.getFullYear() !== year || d.getMonth() !== month) return;
+    const key = `${year}-${month}-${d.getDate()}`;
+    if (!dayMap[key]) dayMap[key] = {};
+    const z = (e.zone || '').toUpperCase(); // full zone name (e.g. FTW_D2A)
+    dayMap[key][z] = (dayMap[key][z] || 0) + 1;
+  });
+
+  // Render grid
+  grid.innerHTML = '';
+  const startDow = firstDay.getDay(); // 0=Sun
+  const daysInMonth = lastDay.getDate();
+  const today = new Date();
+
+  // Blank cells before first day
+  for (let i = 0; i < startDow; i++) {
+    const blank = document.createElement('div');
+    blank.style.cssText = 'min-height:72px;';
+    grid.appendChild(blank);
+  }
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const key = `${year}-${month}-${day}`;
+    const zones = dayMap[key] || {};
+    const zoneKeys = Object.keys(zones).sort();
+    const totalCount = zoneKeys.reduce((s, z) => s + zones[z], 0);
+    const isToday = today.getFullYear()===year && today.getMonth()===month && today.getDate()===day;
+    const hasData = zoneKeys.length > 0;
+
+    const cell = document.createElement('div');
+    cell.style.cssText = `min-height:72px;background:var(--surface2);border:1.5px solid ${isToday ? 'var(--gold)' : 'var(--border)'};border-radius:8px;padding:6px 7px;cursor:${hasData?'pointer':'default'};transition:border-color 0.15s;`;
+    if (hasData) cell.onmouseenter = () => cell.style.borderColor = 'var(--gold)';
+    if (hasData) cell.onmouseleave = () => cell.style.borderColor = isToday ? 'var(--gold)' : 'var(--border)';
+
+    // Day number
+    const dayNum = document.createElement('div');
+    dayNum.style.cssText = `font-size:0.75rem;font-weight:${isToday?'800':'600'};color:${isToday?'var(--gold)':'var(--text2)'};margin-bottom:4px;`;
+    dayNum.textContent = day;
+    cell.appendChild(dayNum);
+
+    if (hasData) {
+      // Zone badges
+      zoneKeys.forEach(z => {
+        const badge = document.createElement('div');
+        badge.style.cssText = `display:inline-flex;align-items:center;gap:3px;background:${rptZoneColor(z)}22;border:1px solid ${rptZoneColor(z)}66;border-radius:4px;padding:1px 5px;margin:1px 1px 0 0;font-size:0.65rem;font-weight:700;color:${rptZoneColor(z)};`;
+        badge.textContent = `${z} ${zones[z]}`;
+        cell.appendChild(badge);
+      });
+      // Total if more than one zone
+      if (zoneKeys.length > 1) {
+        const tot = document.createElement('div');
+        tot.style.cssText = 'font-size:0.65rem;color:var(--text3);margin-top:3px;';
+        tot.textContent = `${totalCount} total`;
+        cell.appendChild(tot);
+      }
+      cell.onclick = () => rptShowDayDetail(day, zones, zoneKeys);
+    }
+
+    grid.appendChild(cell);
+  }
+}
+
+function rptShowDayDetail(day, zones, zoneKeys) {
+  const year = window._rptYear, month = window._rptMonth;
+  const dateStr = new Date(year, month, day).toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+  document.getElementById('rpt-detail-date').textContent = dateStr;
+
+  const total = zoneKeys.reduce((s, z) => s + zones[z], 0);
+  let html = `<div style="font-size:0.78rem;color:var(--text3);margin-bottom:10px;">${total} visit record${total!==1?'s':''} across ${zoneKeys.length} zone${zoneKeys.length!==1?'s':''}</div>`;
+  html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+  zoneKeys.forEach(z => {
+    const color = rptZoneColor(z);
+    const pct = Math.round(zones[z] / total * 100);
+    html += `
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:60px;font-size:0.78rem;font-weight:700;color:${color};">${z}</div>
+        <div style="flex:1;background:var(--border);border-radius:4px;height:8px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;transition:width 0.4s;"></div>
+        </div>
+        <div style="font-size:0.78rem;color:var(--text2);width:50px;text-align:right;">${zones[z]} visit${zones[z]!==1?'s':''}</div>
+      </div>`;
+  });
+  html += '</div>';
+
+  document.getElementById('rpt-detail-body').innerHTML = html;
+  document.getElementById('rpt-day-detail').style.display = 'block';
+}
+// ===== END REPORTS TAB =====
+
 </script>
 <div id="info-popover">
   <div id="info-popover-title"></div>
