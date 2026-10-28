@@ -5465,7 +5465,7 @@ async function rptRenderCalendar() {
     if (d.getFullYear() !== year || d.getMonth() !== month) return;
     const key = `${year}-${month}-${d.getDate()}`;
     if (!dayMap[key]) dayMap[key] = {};
-    const z = (e.zone || '').toUpperCase().split('_')[0] || e.zone; // group by prefix (DAL, FTW)
+    const z = (e.zone || '').toUpperCase(); // full zone name (e.g. FTW_D2A)
     dayMap[key][z] = (dayMap[key][z] || 0) + 1;
   });
 
