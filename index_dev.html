@@ -78,8 +78,8 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
 .nav-tab.active{color:var(--gold);border-bottom-color:var(--gold);}
 .tab-pane{display:none;}
 .tab-pane.active{display:flex;flex-direction:column;animation:fadeUp 0.3s ease;flex:1;overflow-y:hidden;}
-.tab-pane.map-pane.active{display:flex;flex-direction:column;}
-.tab-scroll{padding:24px 20px;max-width:900px;margin:0 auto;width:100%;flex:1;overflow-y:auto;}
+.tab-pane.map-pane.active{display:flex;flex-direction:column;flex:1;overflow-y:hidden;}
+.tab-scroll{padding:24px 20px;max-width:900px;margin:0 auto;width:100%;flex:1;overflow-y:auto;min-height:0;}
 #tab-reports .tab-scroll{padding-top:0 !important;}
 
 /* CARDS */
@@ -468,10 +468,12 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
       <span style="font-size:0.72rem;font-weight:800;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);">🗺️ Route Map</span>
       <a class="map-ext-btn" id="map-ext-link" href="#" target="_blank" style="display:none;">↗ Open Zone Map</a>
     </div>
-    <div class="map-frame-area" id="map-frame-area" style="min-height:200px;"></div>
-    <div id="map-leaflet" style="height:320px;display:none;border-top:1px solid var(--border);"></div>
-    <!-- Business stops list -->
-    <div id="map-stops-area" style="padding:12px 16px 0;"></div>
+    <div class="tab-scroll" style="padding:0;">
+      <div class="map-frame-area" id="map-frame-area" style="min-height:200px;flex:none;position:relative;"></div>
+      <div id="map-leaflet" style="height:320px;display:none;border-top:1px solid var(--border);"></div>
+      <!-- Business stops list -->
+      <div id="map-stops-area" style="padding:12px 16px 16px;"></div>
+    </div>
   </div>
 
   <!-- TAB: All Entries (owner) -->
@@ -4523,7 +4525,7 @@ function renderZoMap() {
       maxZoom: 19
     }).addTo(_zoMap);
     _zoLayerGroup = L.layerGroup().addTo(_zoMap);
-    refreshZoMapPins();
+    refreshZoMapPins(true);
   }, 80);
 }
 
@@ -4559,7 +4561,7 @@ function zoLegendSelectAll(selectAll) {
   refreshZoMapPins();
 }
 
-function refreshZoMapPins() {
+function refreshZoMapPins(fitView) {
   if (!_zoMap || !_zoLayerGroup) return;
   _zoLayerGroup.clearLayers();
   const zoneNames = [...new Set(_zoProposed.map(b => b.zone))].sort();
@@ -4573,9 +4575,11 @@ function refreshZoMapPins() {
       .bindPopup(`<b>${b.business_name}</b><br><span style="font-size:0.72rem;color:#888;">${b.account_number}</span><br>${b.zone}<br>${b.city || ''}`);
     _zoLayerGroup.addLayer(marker);
   });
-  // Fit bounds to all proposed points (not just visible) so panning context is preserved
-  const allCoords = _zoProposed.map(b => [b.lat, b.lng]);
-  if (visible.length && allCoords.length) _zoMap.fitBounds(allCoords, { padding: [24, 24] });
+  // Only fit bounds on initial load — preserve user's zoom/pan on subsequent refreshes
+  if (fitView) {
+    const allCoords = _zoProposed.map(b => [b.lat, b.lng]);
+    if (visible.length && allCoords.length) _zoMap.fitBounds(allCoords, { padding: [24, 24] });
+  }
 }
 
 function renderZoResults(prefix, numZones, total) {
@@ -4695,10 +4699,10 @@ async function loadZoneMapEditor() {
         maxZoom: 19
       }).addTo(_zmeMap);
       _zmeLayerGroup = L.layerGroup().addTo(_zmeMap);
-      zmeRefreshPins();
+      zmeRefreshPins(null, null, true); // fitView=true on initial load only
     }, 80);
   } else {
-    zmeRefreshPins();
+    zmeRefreshPins(null, null, true); // fitView=true on reload
   }
 }
 
@@ -4721,7 +4725,7 @@ function zmeApplyFilters() {
   zmeRefreshPins(filterZone, filterType);
 }
 
-function zmeRefreshPins(filterZone, filterType) {
+function zmeRefreshPins(filterZone, filterType, fitView) {
   if (!_zmeMap || !_zmeLayerGroup) return;
   _zmeLayerGroup.clearLayers();
 
@@ -4757,8 +4761,8 @@ function zmeRefreshPins(filterZone, filterType) {
     rendered++;
   });
 
-  // Fit bounds if showing all
-  if (!filterZone && !filterType && rendered) {
+  // Only fit bounds on initial load — preserve user's zoom/pan on subsequent refreshes
+  if (fitView && rendered) {
     const coords = _zmeBizList.map(b => [parseFloat(b.latitude), parseFloat(b.longitude)]);
     _zmeMap.fitBounds(coords, { padding: [24, 24] });
   }
