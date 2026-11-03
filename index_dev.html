@@ -4323,16 +4323,23 @@ async function renderZoneOptimizerTab() {
 async function loadZoInitialMap() {
   // Show existing businesses on the map when the tab first opens,
   // using their current zone assignments (active + non-DNV + has coords + has zone).
-  const { data: bizList } = await db.from('businesses')
-    .select('account_number, business_name, address, city, state, zone, latitude, longitude, business_type')
-    .eq('active_ind', 1)
-    .eq('do_not_visit', false)
-    .not('latitude', 'is', null)
-    .not('longitude', 'is', null)
-    .not('zone', 'is', null)
-    .limit(10000);
+  // Paginate to get all businesses (Supabase caps at 1000 per request)
+  let bizList = [], _pg = 0, _pgDone = false;
+  while (!_pgDone) {
+    const { data: chunk } = await db.from('businesses')
+      .select('account_number, business_name, address, city, state, zone, latitude, longitude, business_type')
+      .eq('active_ind', 1)
+      .eq('do_not_visit', false)
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null)
+      .not('zone', 'is', null)
+      .range(_pg * 1000, (_pg + 1) * 1000 - 1);
+    bizList = bizList.concat(chunk || []);
+    _pgDone = !chunk || chunk.length < 1000;
+    _pg++;
+  }
 
-  if (!bizList || !bizList.length) return;
+  if (!bizList.length) return;
 
   // Fetch total active counts per zone (all biz, not just mapped) for accurate legend numbers
   const { data: allZoneBiz } = await db.from('businesses')
@@ -4381,18 +4388,25 @@ async function runZoneOptimizer() {
   if (_zoMap) { _zoMap.remove(); _zoMap = null; }
 
   // Fetch all active, non-DNV businesses with coords
-  let query = db.from('businesses')
-    .select('account_number, business_name, address, city, state, zone, latitude, longitude, business_type')
-    .eq('active_ind', 1)
-    .eq('do_not_visit', false)
-    .not('latitude', 'is', null)
-    .not('longitude', 'is', null)
-    .limit(10000);
-  if (bizType) query = query.eq('business_type', bizType);
-
-  const { data: rawBizList, error } = await query;
-  if (error || !rawBizList?.length) {
-    statusEl.innerHTML = `<div style="color:var(--red);font-size:0.85rem;">❌ ${error?.message || 'No businesses with coordinates found.'}</div>`;
+  // Paginate to get all businesses (Supabase caps at 1000 per request)
+  let rawBizList = [], _zoPg = 0, _zoPgDone = false, _zoErr = null;
+  while (!_zoPgDone) {
+    let q = db.from('businesses')
+      .select('account_number, business_name, address, city, state, zone, latitude, longitude, business_type')
+      .eq('active_ind', 1)
+      .eq('do_not_visit', false)
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null)
+      .range(_zoPg * 1000, (_zoPg + 1) * 1000 - 1);
+    if (bizType) q = q.eq('business_type', bizType);
+    const { data: chunk, error } = await q;
+    if (error) { _zoErr = error; break; }
+    rawBizList = rawBizList.concat(chunk || []);
+    _zoPgDone = !chunk || chunk.length < 1000;
+    _zoPg++;
+  }
+  if (_zoErr || !rawBizList?.length) {
+    statusEl.innerHTML = `<div style="color:var(--red);font-size:0.85rem;">❌ ${_zoErr?.message || 'No businesses with coordinates found.'}</div>`;
     return;
   }
 
@@ -4695,25 +4709,27 @@ async function loadZoneMapEditor() {
   statusEl.style.display = 'block';
   statusEl.textContent = '⏳ Loading businesses…';
 
-  const { data, error } = await db.from('businesses')
-    .select('account_number, business_name, city, state, zone, latitude, longitude, business_type')
-    .eq('active_ind', 1)
-    .eq('do_not_visit', false)
-    .not('latitude', 'is', null)
-    .not('longitude', 'is', null)
-    .not('zone', 'is', null)
-    .limit(10000);
-
-  if (error || !data?.length) {
-    statusEl.textContent = error?.message || 'No businesses with zones and coordinates found.';
-    return;
+  // Paginate to get all businesses (Supabase caps at 1000 per request)
+  let data = [], pg = 0, pgDone = false, pgError = null;
+  while (!pgDone) {
+    const { data: chunk, error } = await db.from('businesses')
+      .select('account_number, business_name, city, state, zone, latitude, longitude, business_type')
+      .eq('active_ind', 1)
+      .eq('do_not_visit', false)
+      .not('latitude', 'is', null)
+      .not('longitude', 'is', null)
+      .not('zone', 'is', null)
+      .range(pg * 1000, (pg + 1) * 1000 - 1);
+    if (error) { pgError = error; break; }
+    data = data.concat(chunk || []);
+    pgDone = !chunk || chunk.length < 1000;
+    pg++;
   }
 
-  // Fetch total active counts per zone (all biz, not just mapped) for accurate legend numbers
-  const { data: allZoneBiz } = await db.from('businesses')
-    .select('zone').eq('active_ind', 1).eq('do_not_visit', false).not('zone', 'is', null).limit(10000);
-  _zmeZoneTotals = {};
-  (allZoneBiz || []).forEach(b => { _zmeZoneTotals[b.zone] = (_zmeZoneTotals[b.zone] || 0) + 1; });
+  if (pgError || !data.length) {
+    statusEl.textContent = pgError?.message || 'No businesses with zones and coordinates found.';
+    return;
+  }
 
   _zmeBizList = data;
   _zmeZoneNames = [...new Set(data.map(b => b.zone))].sort();
