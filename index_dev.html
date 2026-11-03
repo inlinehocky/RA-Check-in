@@ -885,6 +885,9 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
               <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(true)">All</button>
               <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoLegendSelectAll(false)">None</button>
             </div>
+            <div style="padding:4px 6px 5px;border-top:1px solid var(--border2);flex-shrink:0;">
+              <button style="width:100%;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zoResetView()">⊡ Reset View</button>
+            </div>
           </div>
         </div>
       </div>
@@ -931,6 +934,9 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
             <div style="padding:5px 6px;border-top:1px solid var(--border2);display:flex;gap:4px;flex-shrink:0;">
               <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zmeLegendSelectAll(true)">All</button>
               <button style="flex:1;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zmeLegendSelectAll(false)">None</button>
+            </div>
+            <div style="padding:4px 6px 5px;border-top:1px solid var(--border2);flex-shrink:0;">
+              <button style="width:100%;font-size:0.65rem;padding:3px 4px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--text2);cursor:pointer;" onclick="zmeResetView()">⊡ Reset View</button>
             </div>
           </div>
         </div>
@@ -4298,6 +4304,7 @@ let _zoProposed = [];   // [{account_number, business_name, lat, lng, zone, orig
 let _zoMap = null;
 let _zoLayerGroup = null;
 let _zoVisibleZones = new Set(); // zones currently checked in the legend
+let _zoZoneTotals = {}; // zone → total active biz count (all, not just mapped)
 
 // Palette for up to 20 zones
 const ZO_COLORS = [
@@ -4322,9 +4329,16 @@ async function loadZoInitialMap() {
     .eq('do_not_visit', false)
     .not('latitude', 'is', null)
     .not('longitude', 'is', null)
-    .not('zone', 'is', null);
+    .not('zone', 'is', null)
+    .limit(10000);
 
   if (!bizList || !bizList.length) return;
+
+  // Fetch total active counts per zone (all biz, not just mapped) for accurate legend numbers
+  const { data: allZoneBiz } = await db.from('businesses')
+    .select('zone').eq('active_ind', 1).eq('do_not_visit', false).not('zone', 'is', null).limit(10000);
+  _zoZoneTotals = {};
+  (allZoneBiz || []).forEach(b => { _zoZoneTotals[b.zone] = (_zoZoneTotals[b.zone] || 0) + 1; });
 
   // Populate _zoProposed with current zone assignments so renderZoMap / legend work normally
   _zoProposed = bizList.map(b => ({
@@ -4372,7 +4386,8 @@ async function runZoneOptimizer() {
     .eq('active_ind', 1)
     .eq('do_not_visit', false)
     .not('latitude', 'is', null)
-    .not('longitude', 'is', null);
+    .not('longitude', 'is', null)
+    .limit(10000);
   if (bizType) query = query.eq('business_type', bizType);
 
   const { data: rawBizList, error } = await query;
@@ -4545,6 +4560,12 @@ function renderZoLegend(zoneNames) {
   }).join('');
 }
 
+function zoResetView() {
+  if (!_zoMap || !_zoProposed.length) return;
+  const coords = _zoProposed.map(b => [b.lat, b.lng]);
+  _zoMap.fitBounds(coords, { padding: [24, 24] });
+}
+
 function zoLegendToggle(zoneName, visible) {
   if (visible) { _zoVisibleZones.add(zoneName); }
   else { _zoVisibleZones.delete(zoneName); }
@@ -4644,6 +4665,14 @@ function zmeLegendSelectAll(selectAll) {
   zmeRefreshPins(filterZone, filterType);
 }
 
+function zmeResetView() {
+  if (!_zmeMap || !_zmeBizList.length) return;
+  const coords = _zmeBizList
+    .filter(b => b.latitude && b.longitude)
+    .map(b => [parseFloat(b.latitude), parseFloat(b.longitude)]);
+  if (coords.length) _zmeMap.fitBounds(coords, { padding: [24, 24] });
+}
+
 function moveZoBiz(acct, newZone) {
   const biz = _zoProposed.find(b => b.account_number === acct);
   if (biz) biz.zone = newZone;
@@ -4659,7 +4688,7 @@ function moveZoBiz(acct, newZone) {
 }
 
 // ═══ ZONE MAP EDITOR ═══
-let _zmeMap = null, _zmeLayerGroup = null, _zmeBizList = [], _zmeZoneNames = [], _zmeVisibleZones = new Set();
+let _zmeMap = null, _zmeLayerGroup = null, _zmeBizList = [], _zmeZoneNames = [], _zmeVisibleZones = new Set(), _zmeZoneTotals = {};
 
 async function loadZoneMapEditor() {
   const statusEl = document.getElementById('zme-status');
@@ -4672,12 +4701,19 @@ async function loadZoneMapEditor() {
     .eq('do_not_visit', false)
     .not('latitude', 'is', null)
     .not('longitude', 'is', null)
-    .not('zone', 'is', null);
+    .not('zone', 'is', null)
+    .limit(10000);
 
   if (error || !data?.length) {
     statusEl.textContent = error?.message || 'No businesses with zones and coordinates found.';
     return;
   }
+
+  // Fetch total active counts per zone (all biz, not just mapped) for accurate legend numbers
+  const { data: allZoneBiz } = await db.from('businesses')
+    .select('zone').eq('active_ind', 1).eq('do_not_visit', false).not('zone', 'is', null).limit(10000);
+  _zmeZoneTotals = {};
+  (allZoneBiz || []).forEach(b => { _zmeZoneTotals[b.zone] = (_zmeZoneTotals[b.zone] || 0) + 1; });
 
   _zmeBizList = data;
   _zmeZoneNames = [...new Set(data.map(b => b.zone))].sort();
@@ -4772,7 +4808,9 @@ function zmeRefreshPins(filterZone, filterType, fitView) {
   legendEl.innerHTML = _zmeZoneNames.map((z, zi) => {
     const color = ZO_COLORS[zi % ZO_COLORS.length];
     const checked = _zmeVisibleZones.has(z) ? 'checked' : '';
-    const count = _zmeBizList.filter(b => b.zone === z && (!filterType || b.business_type === filterType)).length;
+    const count = filterType
+      ? _zmeBizList.filter(b => b.zone === z && b.business_type === filterType).length
+      : _zmeBizList.filter(b => b.zone === z).length;
     return `
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 4px;border-radius:5px;font-size:0.75rem;color:var(--text);" title="${z} — ${count} businesses">
         <input type="checkbox" id="zme-chk-${z.replace(/[^a-z0-9]/gi,'_')}" ${checked} style="accent-color:${color};cursor:pointer;width:13px;height:13px;flex-shrink:0;" onchange="zmeLegendToggle('${z}', this.checked)">
