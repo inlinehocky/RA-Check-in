@@ -704,13 +704,17 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         <div id="biz-assign-list" style="max-height:360px;overflow-y:auto;"></div>
       </div>
 
-      <div class="card">
+      <!-- Assigned Route Map -->
+      <div class="card" id="assign-route-map-card" style="display:none;">
         <div class="card-head">
-          <div><div class="card-title">🗺️ Zone Route Maps</div>
-            <div class="card-sub">Set a Google Maps link per zone. Employees assigned to a zone see that map automatically.</div></div>
+          <div>
+            <div class="card-title">📍 Assigned Route</div>
+            <div class="card-sub" id="assign-route-map-sub">Select an employee to view their assigned businesses on the map.</div>
+          </div>
         </div>
-        <div id="map-link-editor"></div>
+        <div id="assign-route-map" style="height:480px;border-radius:10px;overflow:hidden;"></div>
       </div>
+
     </div>
   </div>
 
@@ -1030,7 +1034,6 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
           <ul style="font-size:0.82rem;color:var(--text2);line-height:2;padding-left:18px;margin-bottom:16px;">
             <li><strong>Employee Zone Assignments</strong> — toggle which zone(s) each employee covers. This controls their map link and the zone auto-assigned when they add a new business.</li>
             <li><strong>Assign Businesses</strong> — pick an employee, optionally filter by zone, then use <em>✓ Assign All in Zone</em> or toggle individual businesses. <em>✕ Remove All Assigned</em> clears everything regardless of zone filter.</li>
-            <li><strong>Zone Route Maps</strong> — paste a Google Maps share link for each zone. Employees see their zone's map automatically.</li>
           </ul>
 
           <div class="section-label">📍 Zones</div>
@@ -3633,7 +3636,6 @@ async function renderUsersTab() {
   }
   await renderEmpZoneList();
   await renderAssignPills();
-  await renderMapLinkEditor();
 }
 
 // ═══ EMPLOYEE ZONE ASSIGNMENTS ═══
@@ -3713,6 +3715,7 @@ async function renderAssignPills() {
   const c = document.getElementById('assign-pills'); c.innerHTML='';
   const { data: emps } = await db.from('users').select('*').eq('role','employee');
   if (!emps||!emps.length) { c.innerHTML='<span style="font-size:0.8rem;color:var(--text3);font-style:italic;">No employees added yet.</span>'; document.getElementById('biz-assign-list').innerHTML=''; return; }
+  window._allEmpsList = emps;
   if (!assignTarget) assignTarget = emps[0].username;
   emps.forEach(u => {
     const btn = document.createElement('button');
@@ -3773,6 +3776,7 @@ async function renderBizAssignList() {
   // Store empZoneKeys on window for renderBizAssignListUI to use
   window._assignTargetZones = empZoneKeys;
   renderBizAssignListUI();
+  renderAssignedRouteMap();
 }
 function renderBizAssignListUI() {
   const search = document.getElementById('biz-search-input').value.toLowerCase();
@@ -3814,6 +3818,91 @@ function renderBizAssignListUI() {
     c.appendChild(row);
   });
 }
+
+function renderAssignedRouteMap() {
+  const card = document.getElementById('assign-route-map-card');
+  const subEl = document.getElementById('assign-route-map-sub');
+  const mapDiv = document.getElementById('assign-route-map');
+  if (!card || !mapDiv) return;
+
+  // Find businesses that are assigned and have valid coords
+  const pins = allBusinesses.filter(b =>
+    assignedAccounts.has(b.account_number) &&
+    b.latitude != null && b.longitude != null
+  );
+
+  // Show/hide card
+  card.style.display = pins.length || assignTarget ? '' : 'none';
+  if (!assignTarget) { card.style.display = 'none'; return; }
+  card.style.display = '';
+
+  // Update subtitle
+  const emp = (window._allEmpsList || []).find(e => e.username === assignTarget);
+  const empName = emp ? (emp.display_name || emp.username) : assignTarget;
+  subEl.textContent = pins.length
+    ? `${pins.length} assigned business${pins.length !== 1 ? 'es' : ''} for ${empName}`
+    : `No mapped businesses assigned to ${empName}`;
+
+  // Zone color palette — same as Zone Map Editor
+  const zoneColors = ['#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#34495e','#e91e63','#00bcd4','#8bc34a','#ff5722','#607d8b','#795548','#ffc107'];
+  const zoneColorMap = {};
+  let colorIdx = 0;
+
+  // Initialize or reuse map
+  if (!_assignMap) {
+    _assignMap = L.map(mapDiv, { zoomControl: true });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors', maxZoom: 19
+    }).addTo(_assignMap);
+    _assignLayerGroup = L.layerGroup().addTo(_assignMap);
+  } else {
+    _assignLayerGroup.clearLayers();
+  }
+  // Force map to recalculate size (in case it was hidden)
+  setTimeout(() => _assignMap.invalidateSize(), 50);
+
+  if (!pins.length) {
+    _assignMap.setView([32.7767, -96.7970], 10);
+    return;
+  }
+
+  // Assign colors by zone
+  pins.forEach(b => {
+    if (b.zone && !(b.zone in zoneColorMap)) {
+      zoneColorMap[b.zone] = zoneColors[colorIdx % zoneColors.length];
+      colorIdx++;
+    }
+  });
+
+  // Add markers
+  pins.forEach(b => {
+    const color = b.zone ? (zoneColorMap[b.zone] || '#888') : '#888';
+    const marker = L.circleMarker([b.latitude, b.longitude], {
+      radius: 8, fillColor: color, color: '#fff', weight: 2,
+      opacity: 1, fillOpacity: 0.88, interactive: true
+    });
+    const zoneName = allZones.find(z => b.zone && b.zone.toUpperCase().startsWith(z.zone_key.toUpperCase()))?.zone_name || '';
+    const cityLine = [b.city, b.state].filter(Boolean).join(', ');
+    const zoneLabel = b.zone ? `<div style="margin-top:4px;font-size:0.72rem;color:#888;">Zone ${b.zone}${zoneName ? ' — ' + zoneName : ''}</div>` : '';
+    marker.bindPopup(
+      `<div style="min-width:160px;line-height:1.5;">
+        <div style="font-weight:700;font-size:0.9rem;margin-bottom:2px;">${b.business_name}</div>
+        <div style="font-size:0.78rem;color:#555;">Acct #${b.account_number}</div>
+        ${cityLine ? `<div style="font-size:0.78rem;color:#555;">${cityLine}</div>` : ''}
+        ${zoneLabel}
+      </div>`,
+      { maxWidth: 240 }
+    );
+    marker.on('mouseover', function() { this.setStyle({ radius: 10, weight: 2.5 }); });
+    marker.on('mouseout', function() { this.setStyle({ radius: 8, weight: 2 }); });
+    _assignLayerGroup.addLayer(marker);
+  });
+
+  // Fit map to markers
+  const group = L.featureGroup(pins.map(b => L.circleMarker([b.latitude, b.longitude])));
+  _assignMap.fitBounds(group.getBounds().pad(0.1));
+}
+
 async function selectAllInZone(assign) {
   const zoneFilter = document.getElementById('assign-zone-filter').value;
   if (!assignTarget) { showToast('Select an employee first'); return; }
@@ -3845,6 +3934,7 @@ async function selectAllInZone(assign) {
   }
   updateEmpAssignedCount();
   renderBizAssignListUI();
+  renderAssignedRouteMap();
 }
 function updateEmpAssignedCount() {
   if (!assignTarget) return;
@@ -3864,6 +3954,7 @@ async function toggleAssignment(acct, assign) {
   }
   updateEmpAssignedCount();
   renderBizAssignListUI();
+  renderAssignedRouteMap();
 }
 async function addEmployee() {
   const u=document.getElementById('new-emp-user').value.trim();
@@ -4703,6 +4794,9 @@ function moveZoBiz(acct, newZone) {
 
 // ═══ ZONE MAP EDITOR ═══
 let _zmeMap = null, _zmeLayerGroup = null, _zmeBizList = [], _zmeZoneNames = [], _zmeVisibleZones = new Set(), _zmeZoneTotals = {};
+
+// ═══ ASSIGNED ROUTE MAP ═══
+let _assignMap = null, _assignLayerGroup = null;
 
 async function loadZoneMapEditor() {
   const statusEl = document.getElementById('zme-status');
