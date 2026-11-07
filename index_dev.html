@@ -1065,38 +1065,6 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
   </div>
 <div class="tab-pane" id="tab-reports">
     <div class="tab-scroll" style="padding-top:0;">
-      <!-- Month nav row -->
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div class="card-title">📈 Visit Reports</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button class="btn btn-outline" id="rpt-prev-month" onclick="rptChangeMonth(-1)" style="padding:4px 12px;font-size:0.8rem;">‹</button>
-          <div id="rpt-month-label" style="font-size:0.88rem;font-weight:700;color:var(--gold);min-width:120px;text-align:center;"></div>
-          <button class="btn btn-outline" id="rpt-next-month" onclick="rptChangeMonth(1)" style="padding:4px 12px;font-size:0.8rem;">›</button>
-        </div>
-      </div>
-
-      <!-- Calendar grid -->
-      <div class="card" style="padding:10px;">
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;">
-          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">SUN</div>
-          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">MON</div>
-          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">TUE</div>
-          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">WED</div>
-          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">THU</div>
-          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">FRI</div>
-          <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">SAT</div>
-        </div>
-        <div id="rpt-calendar-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
-      </div>
-
-      <!-- Day detail panel -->
-      <div id="rpt-day-detail" style="display:none;margin-top:8px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-          <div id="rpt-detail-date" style="font-size:0.92rem;font-weight:700;color:var(--text);"></div>
-          <button onclick="document.getElementById('rpt-day-detail').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:1.1rem;cursor:pointer;padding:0 4px;">✕</button>
-        </div>
-        <div id="rpt-detail-body"></div>
-      </div>
 
       <!-- ══════════ MANAGEMENT REPORTS ══════════ -->
       <div style="margin-top:28px;">
@@ -1194,6 +1162,42 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </div>
 
       </div><!-- end management reports -->
+
+      <!-- ══════════ VISIT CALENDAR ══════════ -->
+      <div style="margin-top:28px;">
+        <!-- Month nav row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div class="card-title">📈 Visit Calendar</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <button class="btn btn-outline" id="rpt-prev-month" onclick="rptChangeMonth(-1)" style="padding:4px 12px;font-size:0.8rem;">‹</button>
+            <div id="rpt-month-label" style="font-size:0.88rem;font-weight:700;color:var(--gold);min-width:120px;text-align:center;"></div>
+            <button class="btn btn-outline" id="rpt-next-month" onclick="rptChangeMonth(1)" style="padding:4px 12px;font-size:0.8rem;">›</button>
+          </div>
+        </div>
+
+        <!-- Calendar grid -->
+        <div class="card" style="padding:10px;">
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;">
+            <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">SUN</div>
+            <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">MON</div>
+            <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">TUE</div>
+            <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">WED</div>
+            <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">THU</div>
+            <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">FRI</div>
+            <div style="text-align:center;font-size:0.7rem;font-weight:700;color:var(--text3);padding:4px 0;">SAT</div>
+          </div>
+          <div id="rpt-calendar-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;"></div>
+        </div>
+
+        <!-- Day detail panel -->
+        <div id="rpt-day-detail" style="display:none;margin-top:8px;padding:14px 16px;background:var(--surface);border:1px solid var(--border);border-radius:10px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+            <div id="rpt-detail-date" style="font-size:0.92rem;font-weight:700;color:var(--text);"></div>
+            <button onclick="document.getElementById('rpt-day-detail').style.display='none'" style="background:none;border:none;color:var(--text3);font-size:1.1rem;cursor:pointer;padding:0 4px;">✕</button>
+          </div>
+          <div id="rpt-detail-body"></div>
+        </div>
+      </div><!-- end visit calendar -->
 
     </div>
   </div>
