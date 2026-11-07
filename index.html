@@ -1097,6 +1097,104 @@ textarea.field-input{resize:vertical;min-height:80px;margin-bottom:0;font-size:0
         </div>
         <div id="rpt-detail-body"></div>
       </div>
+
+      <!-- ══════════ MANAGEMENT REPORTS ══════════ -->
+      <div style="margin-top:28px;">
+        <div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--text3);margin-bottom:14px;">📊 Management Reports</div>
+
+        <!-- Section tabs -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;" id="mgmt-report-tabs">
+          <button class="filter-chip active" onclick="mgmtShowSection('coverage',this)">🏢 Business Coverage</button>
+          <button class="filter-chip" onclick="mgmtShowSection('rep',this)">👤 Rep Performance</button>
+          <button class="filter-chip" onclick="mgmtShowSection('zone',this)">📍 Zone Health</button>
+          <button class="filter-chip" onclick="mgmtShowSection('trends',this)">📈 Trends</button>
+        </div>
+
+        <!-- Business Coverage -->
+        <div id="mgmt-section-coverage">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-head" style="margin-bottom:12px;">
+              <div><div class="card-title" style="font-size:0.9rem;">🏢 Business Coverage</div>
+                <div class="card-sub">Which businesses have been visited, and how recently.</div></div>
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <select class="field-input" id="cov-days-filter" style="width:auto;font-size:0.78rem;padding:6px 10px;margin:0;" onchange="renderCoverageReport()">
+                  <option value="30">Last 30 days</option>
+                  <option value="60">Last 60 days</option>
+                  <option value="90" selected>Last 90 days</option>
+                  <option value="180">Last 180 days</option>
+                  <option value="365">Last 365 days</option>
+                  <option value="0">All time</option>
+                </select>
+                <select class="field-input" id="cov-type-filter" style="width:auto;font-size:0.78rem;padding:6px 10px;margin:0;" onchange="renderCoverageReport()">
+                  <option value="">All Types</option>
+                  <option value="Mechanical">Mechanical</option>
+                  <option value="Collision">Collision</option>
+                </select>
+              </div>
+            </div>
+            <!-- KPI row -->
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;" id="cov-kpi-row"></div>
+            <!-- At-risk table -->
+            <div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px;">⚠️ Not Visited in Period</div>
+            <div id="cov-at-risk-list" style="max-height:320px;overflow-y:auto;"></div>
+          </div>
+        </div>
+
+        <!-- Rep Performance -->
+        <div id="mgmt-section-rep" style="display:none;">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-head" style="margin-bottom:12px;">
+              <div><div class="card-title" style="font-size:0.9rem;">👤 Rep Performance</div>
+                <div class="card-sub">Side-by-side comparison of rep activity.</div></div>
+              <select class="field-input" id="rep-days-filter" style="width:auto;font-size:0.78rem;padding:6px 10px;margin:0;" onchange="renderRepReport()">
+                <option value="30">Last 30 days</option>
+                <option value="60">Last 60 days</option>
+                <option value="90" selected>Last 90 days</option>
+                <option value="180">Last 180 days</option>
+                <option value="365">Last 365 days</option>
+                <option value="0">All time</option>
+              </select>
+            </div>
+            <div id="rep-report-body"></div>
+          </div>
+        </div>
+
+        <!-- Zone Health -->
+        <div id="mgmt-section-zone" style="display:none;">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-head" style="margin-bottom:12px;">
+              <div><div class="card-title" style="font-size:0.9rem;">📍 Zone Health</div>
+                <div class="card-sub">Entry volume and coverage per zone.</div></div>
+              <select class="field-input" id="zone-days-filter" style="width:auto;font-size:0.78rem;padding:6px 10px;margin:0;" onchange="renderZoneReport()">
+                <option value="30">Last 30 days</option>
+                <option value="60">Last 60 days</option>
+                <option value="90" selected>Last 90 days</option>
+                <option value="180">Last 180 days</option>
+                <option value="365">Last 365 days</option>
+                <option value="0">All time</option>
+              </select>
+            </div>
+            <div id="zone-report-body"></div>
+          </div>
+        </div>
+
+        <!-- Trends -->
+        <div id="mgmt-section-trends" style="display:none;">
+          <div class="card" style="margin-bottom:12px;">
+            <div class="card-head" style="margin-bottom:12px;">
+              <div><div class="card-title" style="font-size:0.9rem;">📈 Trends</div>
+                <div class="card-sub">Week-over-week and month-over-month visit volume.</div></div>
+              <select class="field-input" id="trends-view-filter" style="width:auto;font-size:0.78rem;padding:6px 10px;margin:0;" onchange="renderTrendsReport()">
+                <option value="weekly">Weekly (last 12 weeks)</option>
+                <option value="monthly" selected>Monthly (last 12 months)</option>
+              </select>
+            </div>
+            <div id="trends-report-body"></div>
+          </div>
+        </div>
+
+      </div><!-- end management reports -->
+
     </div>
   </div>
 
@@ -5575,6 +5673,392 @@ async function renderReportsTab() {
   const now = new Date();
   if (window._rptYear === null) { window._rptYear = now.getFullYear(); window._rptMonth = now.getMonth(); }
   await rptRenderCalendar();
+  // Load management reports (owner only)
+  if (currentUser && currentUser.role === 'owner') {
+    await mgmtLoadEntries();
+    await mgmtLoadBusinesses();
+    renderCoverageReport();
+  }
+}
+
+// ═══ MANAGEMENT REPORTS ═══
+let _mgmtEntries = null, _mgmtBusinesses = null;
+
+async function mgmtLoadEntries() {
+  if (_mgmtEntries) return;
+  let rows = [], page = 0, done = false;
+  while (!done) {
+    const { data } = await db.from('entries')
+      .select('id, username, account_number, entry_date, zone, business_type, used_in_report_at')
+      .range(page * 1000, (page + 1) * 1000 - 1);
+    rows = rows.concat(data || []);
+    done = !data || data.length < 1000;
+    page++;
+  }
+  // Parse dates once
+  _mgmtEntries = rows.map(e => {
+    const parts = (e.entry_date || '').split('/');
+    const d = parts.length === 3 ? new Date(+parts[2], +parts[0]-1, +parts[1]) : null;
+    return { ...e, _date: d };
+  }).filter(e => e._date && !isNaN(e._date));
+}
+
+async function mgmtLoadBusinesses() {
+  if (_mgmtBusinesses) return;
+  let rows = [], page = 0, done = false;
+  while (!done) {
+    const { data } = await db.from('businesses')
+      .select('account_number, business_name, city, state, zone, business_type, active_ind, do_not_visit')
+      .eq('active_ind', 1).eq('do_not_visit', false)
+      .range(page * 1000, (page + 1) * 1000 - 1);
+    rows = rows.concat(data || []);
+    done = !data || data.length < 1000;
+    page++;
+  }
+  _mgmtBusinesses = rows;
+}
+
+function mgmtShowSection(section, btn) {
+  ['coverage','rep','zone','trends'].forEach(s => {
+    document.getElementById(`mgmt-section-${s}`).style.display = s === section ? '' : 'none';
+  });
+  document.querySelectorAll('#mgmt-report-tabs .filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  if (section === 'coverage') renderCoverageReport();
+  if (section === 'rep') renderRepReport();
+  if (section === 'zone') renderZoneReport();
+  if (section === 'trends') renderTrendsReport();
+}
+
+function mgmtCutoffDate(days) {
+  if (!days || days === '0' || +days === 0) return null;
+  const d = new Date();
+  d.setDate(d.getDate() - +days);
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function mgmtKpiTile(label, value, sub, color) {
+  color = color || 'var(--gold)';
+  return `<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;">
+    <div style="font-size:0.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:4px;">${label}</div>
+    <div style="font-size:1.5rem;font-weight:800;color:${color};line-height:1;">${value}</div>
+    ${sub ? `<div style="font-size:0.68rem;color:var(--text3);margin-top:3px;">${sub}</div>` : ''}
+  </div>`;
+}
+
+// ── Business Coverage ──
+function renderCoverageReport() {
+  if (!_mgmtEntries || !_mgmtBusinesses) return;
+  const days = document.getElementById('cov-days-filter').value;
+  const typeFilter = document.getElementById('cov-type-filter').value;
+  const cutoff = mgmtCutoffDate(days);
+
+  let entries = cutoff ? _mgmtEntries.filter(e => e._date >= cutoff) : _mgmtEntries;
+  let businesses = typeFilter ? _mgmtBusinesses.filter(b => b.business_type === typeFilter) : _mgmtBusinesses;
+
+  // Most recent visit date per account
+  const lastVisit = {};
+  _mgmtEntries.forEach(e => {
+    if (!lastVisit[e.account_number] || e._date > lastVisit[e.account_number]) {
+      lastVisit[e.account_number] = e._date;
+    }
+  });
+
+  const visitedInPeriod = new Set(entries.map(e => e.account_number));
+  const neverVisited = businesses.filter(b => !lastVisit[b.account_number]);
+  const notInPeriod  = businesses.filter(b => !visitedInPeriod.has(b.account_number));
+  const covPct = businesses.length ? Math.round((visitedInPeriod.size / businesses.length) * 100) : 0;
+
+  // KPI row
+  const kpiRow = document.getElementById('cov-kpi-row');
+  kpiRow.innerHTML = [
+    mgmtKpiTile('Total Active', businesses.length, typeFilter || 'all types'),
+    mgmtKpiTile('Visited in Period', visitedInPeriod.size, `${covPct}% coverage`, covPct >= 70 ? 'var(--green)' : covPct >= 40 ? 'var(--gold)' : 'var(--red)'),
+    mgmtKpiTile('Not Visited', notInPeriod.length, `in selected period`, 'var(--red)'),
+    mgmtKpiTile('Never Visited', neverVisited.length, 'no entry ever', 'var(--text2)'),
+  ].join('');
+
+  // At-risk list — sorted by last visit date ascending (oldest first), then never visited
+  const atRisk = businesses
+    .filter(b => !visitedInPeriod.has(b.account_number))
+    .map(b => ({ ...b, lastDate: lastVisit[b.account_number] || null }))
+    .sort((a, b) => {
+      if (!a.lastDate && !b.lastDate) return (a.business_name||'').localeCompare(b.business_name||'');
+      if (!a.lastDate) return 1;
+      if (!b.lastDate) return -1;
+      return a.lastDate - b.lastDate;
+    });
+
+  const list = document.getElementById('cov-at-risk-list');
+  if (!atRisk.length) {
+    list.innerHTML = '<div style="font-size:0.8rem;color:var(--green);font-style:italic;padding:8px 0;">✓ All businesses visited in this period.</div>';
+    return;
+  }
+  const today = new Date(); today.setHours(0,0,0,0);
+  list.innerHTML = atRisk.map(b => {
+    const daysAgo = b.lastDate ? Math.round((today - b.lastDate) / 86400000) : null;
+    const lastStr = daysAgo === null ? '<span style="color:var(--text3);font-style:italic;">never visited</span>'
+      : `<span style="color:${daysAgo > 180 ? 'var(--red)' : 'var(--gold)'};">${daysAgo}d ago</span>`;
+    const typeColor = b.business_type === 'Mechanical' ? 'var(--blue)' : b.business_type === 'Collision' ? 'var(--red)' : 'var(--text3)';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 2px;border-bottom:1px solid var(--border);">
+      <div>
+        <div style="font-size:0.82rem;font-weight:600;">${b.business_name}
+          ${b.business_type ? `<span style="font-size:0.65rem;font-weight:800;color:${typeColor};margin-left:4px;">${b.business_type}</span>` : ''}
+        </div>
+        <div style="font-size:0.7rem;color:var(--text3);">${[b.city, b.state, b.zone ? 'Zone '+b.zone : ''].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div style="font-size:0.78rem;white-space:nowrap;margin-left:12px;">${lastStr}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── Rep Performance ──
+function renderRepReport() {
+  if (!_mgmtEntries || !_mgmtBusinesses) return;
+  const days = document.getElementById('rep-days-filter').value;
+  const cutoff = mgmtCutoffDate(days);
+  const entries = cutoff ? _mgmtEntries.filter(e => e._date >= cutoff) : _mgmtEntries;
+
+  // Group by rep
+  const reps = {};
+  entries.forEach(e => {
+    if (!reps[e.username]) reps[e.username] = { entries: 0, accounts: new Set(), zones: new Set(), byType: {} };
+    reps[e.username].entries++;
+    reps[e.username].accounts.add(e.account_number);
+    if (e.zone) reps[e.username].zones.add(e.zone);
+    const t = e.business_type || 'Unknown';
+    reps[e.username].byType[t] = (reps[e.username].byType[t] || 0) + 1;
+  });
+
+  // Assigned businesses per rep
+  const assigned = {};
+  (_mgmtBusinesses || []).forEach(b => {/* will join from business_assignments below */});
+
+  const repNames = Object.keys(reps).sort();
+  const repColors = ['var(--gold)','var(--teal)','var(--blue)','var(--green)','var(--red)'];
+  const body = document.getElementById('rep-report-body');
+
+  if (!repNames.length) {
+    body.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;padding:8px 0;">No entries in this period.</div>';
+    return;
+  }
+
+  // Summary table
+  let html = `<div style="overflow-x:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--border2);">
+          <th style="text-align:left;padding:8px 6px;color:var(--text3);font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Rep</th>
+          <th style="text-align:right;padding:8px 6px;color:var(--text3);font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Entries</th>
+          <th style="text-align:right;padding:8px 6px;color:var(--text3);font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Unique Accts</th>
+          <th style="text-align:right;padding:8px 6px;color:var(--text3);font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Zones</th>
+          <th style="text-align:right;padding:8px 6px;color:var(--text3);font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Mech</th>
+          <th style="text-align:right;padding:8px 6px;color:var(--text3);font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Collision</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+  const totalEntries = entries.length;
+  repNames.forEach((rep, i) => {
+    const r = reps[rep];
+    const pct = totalEntries ? Math.round((r.entries / totalEntries) * 100) : 0;
+    const color = repColors[i % repColors.length];
+    html += `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:10px 6px;">
+        <div style="font-weight:700;color:${color};">${rep}</div>
+        <div style="margin-top:4px;background:var(--border);border-radius:4px;height:4px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:${color};border-radius:4px;"></div>
+        </div>
+        <div style="font-size:0.65rem;color:var(--text3);margin-top:2px;">${pct}% of period total</div>
+      </td>
+      <td style="text-align:right;padding:10px 6px;font-weight:700;">${r.entries}</td>
+      <td style="text-align:right;padding:10px 6px;">${r.accounts.size}</td>
+      <td style="text-align:right;padding:10px 6px;">${r.zones.size}</td>
+      <td style="text-align:right;padding:10px 6px;color:var(--blue);">${r.byType['Mechanical']||0}</td>
+      <td style="text-align:right;padding:10px 6px;color:var(--red);">${r.byType['Collision']||0}</td>
+    </tr>`;
+  });
+
+  html += `</tbody></table></div>`;
+
+  // Coverage % per rep (assigned vs visited)
+  html += `<div style="margin-top:16px;">
+    <div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px;">Avg Visits per Unique Account (period)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;">`;
+  repNames.forEach((rep, i) => {
+    const r = reps[rep];
+    const avg = r.accounts.size ? (r.entries / r.accounts.size).toFixed(1) : '—';
+    const color = repColors[i % repColors.length];
+    html += mgmtKpiTile(rep, avg, `${r.entries} entries / ${r.accounts.size} accts`, color);
+  });
+  html += `</div></div>`;
+
+  body.innerHTML = html;
+}
+
+// ── Zone Health ──
+function renderZoneReport() {
+  if (!_mgmtEntries || !_mgmtBusinesses) return;
+  const days = document.getElementById('zone-days-filter').value;
+  const cutoff = mgmtCutoffDate(days);
+  const entries = cutoff ? _mgmtEntries.filter(e => e._date >= cutoff) : _mgmtEntries;
+
+  // Count entries per zone
+  const zoneEntries = {}, zoneAccounts = {};
+  entries.forEach(e => {
+    const z = e.zone || '(none)';
+    zoneEntries[z] = (zoneEntries[z] || 0) + 1;
+    if (!zoneAccounts[z]) zoneAccounts[z] = new Set();
+    zoneAccounts[z].add(e.account_number);
+  });
+
+  // Business counts per zone
+  const zoneBizTotal = {};
+  _mgmtBusinesses.forEach(b => {
+    const z = b.zone || '(none)';
+    zoneBizTotal[z] = (zoneBizTotal[z] || 0) + 1;
+  });
+
+  const zones = [...new Set([...Object.keys(zoneEntries), ...Object.keys(zoneBizTotal)])].sort();
+  const maxEntries = Math.max(...zones.map(z => zoneEntries[z] || 0), 1);
+
+  const body = document.getElementById('zone-report-body');
+  if (!zones.length) {
+    body.innerHTML = '<div style="font-size:0.8rem;color:var(--text3);font-style:italic;padding:8px 0;">No data.</div>';
+    return;
+  }
+
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">`;
+  zones.forEach(z => {
+    const cnt = zoneEntries[z] || 0;
+    const uniq = zoneAccounts[z] ? zoneAccounts[z].size : 0;
+    const total = zoneBizTotal[z] || 0;
+    const covPct = total ? Math.round((uniq / total) * 100) : 0;
+    const barPct = Math.round((cnt / maxEntries) * 100);
+    const covColor = covPct >= 70 ? 'var(--green)' : covPct >= 40 ? 'var(--gold)' : 'var(--red)';
+    html += `<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px 14px;">
+      <div style="font-size:0.78rem;font-weight:800;color:var(--text);margin-bottom:6px;">${z}</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.72rem;color:var(--text3);margin-bottom:4px;">
+        <span>${cnt} entries</span>
+        <span style="color:${covColor};">${covPct}% coverage</span>
+      </div>
+      <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden;margin-bottom:6px;">
+        <div style="width:${barPct}%;height:100%;background:var(--teal);border-radius:4px;"></div>
+      </div>
+      <div style="font-size:0.68rem;color:var(--text3);">${uniq} of ${total} businesses visited</div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // Leaderboard
+  const sorted = [...zones].filter(z => zoneEntries[z]).sort((a,b) => (zoneEntries[b]||0) - (zoneEntries[a]||0));
+  if (sorted.length) {
+    html += `<div style="margin-top:16px;">
+      <div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px;">🏆 Zone Leaderboard by Entries</div>
+      <div>`;
+    sorted.forEach((z, i) => {
+      const cnt = zoneEntries[z] || 0;
+      const pct = Math.round((cnt / (entries.length || 1)) * 100);
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`;
+      html += `<div style="display:flex;align-items:center;gap:10px;padding:6px 2px;border-bottom:1px solid var(--border);">
+        <div style="width:28px;text-align:center;font-size:0.82rem;">${medal}</div>
+        <div style="flex:1;font-size:0.82rem;font-weight:600;">${z}</div>
+        <div style="font-size:0.82rem;font-weight:700;color:var(--gold);">${cnt}</div>
+        <div style="font-size:0.72rem;color:var(--text3);width:36px;text-align:right;">${pct}%</div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  body.innerHTML = html;
+}
+
+// ── Trends ──
+function renderTrendsReport() {
+  if (!_mgmtEntries) return;
+  const view = document.getElementById('trends-view-filter').value;
+  const body = document.getElementById('trends-report-body');
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  let buckets = [], labels = [];
+
+  if (view === 'weekly') {
+    for (let w = 11; w >= 0; w--) {
+      const end = new Date(today); end.setDate(today.getDate() - w * 7);
+      const start = new Date(end); start.setDate(end.getDate() - 6);
+      const cnt = _mgmtEntries.filter(e => e._date >= start && e._date <= end).length;
+      const label = start.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+      buckets.push({ label, cnt, start, end });
+    }
+  } else {
+    for (let m = 11; m >= 0; m--) {
+      const d = new Date(today.getFullYear(), today.getMonth() - m, 1);
+      const start = new Date(d.getFullYear(), d.getMonth(), 1);
+      const end   = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const cnt = _mgmtEntries.filter(e => e._date >= start && e._date <= end).length;
+      const label = start.toLocaleDateString('en-US',{month:'short',year:'2-digit'});
+      buckets.push({ label, cnt, start, end });
+    }
+  }
+
+  const maxCnt = Math.max(...buckets.map(b => b.cnt), 1);
+  const current = buckets[buckets.length - 1].cnt;
+  const previous = buckets[buckets.length - 2].cnt;
+  const change = previous ? Math.round(((current - previous) / previous) * 100) : null;
+  const changeStr = change === null ? '—' : (change >= 0 ? `+${change}%` : `${change}%`);
+  const changeColor = change === null ? 'var(--text3)' : change >= 0 ? 'var(--green)' : 'var(--red)';
+
+  // KPI row
+  let html = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
+    ${mgmtKpiTile('Current Period', current, view === 'weekly' ? 'this week' : 'this month')}
+    ${mgmtKpiTile('vs Prior Period', changeStr, 'period-over-period', changeColor)}
+    ${mgmtKpiTile('Period Average', Math.round(buckets.reduce((s,b)=>s+b.cnt,0)/buckets.length), `over ${buckets.length} ${view==='weekly'?'weeks':'months'}`)}
+    ${mgmtKpiTile('Period Total', buckets.reduce((s,b)=>s+b.cnt,0), 'all entries in range')}
+  </div>`;
+
+  // Bar chart
+  html += `<div style="overflow-x:auto;"><div style="display:flex;align-items:flex-end;gap:4px;height:140px;min-width:${buckets.length * 42}px;padding-bottom:24px;position:relative;">`;
+  buckets.forEach((b, i) => {
+    const pct = Math.round((b.cnt / maxCnt) * 100);
+    const isCurrent = i === buckets.length - 1;
+    const color = isCurrent ? 'var(--gold)' : 'var(--teal)';
+    html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:36px;">
+      <div style="font-size:0.65rem;font-weight:700;color:${color};">${b.cnt || ''}</div>
+      <div style="width:100%;background:${color};border-radius:4px 4px 0 0;height:${pct}%;opacity:${isCurrent?1:0.6};min-height:${b.cnt?2:0}px;"></div>
+      <div style="font-size:0.58rem;color:var(--text3);text-align:center;white-space:nowrap;position:absolute;bottom:0;">${b.label}</div>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  // Rep breakdown per period (last 4 periods)
+  const repColors = { };
+  const repColorList = ['var(--gold)','var(--teal)','var(--blue)','var(--green)','var(--red)'];
+  const recentBuckets = buckets.slice(-4);
+  const repNames = [...new Set(_mgmtEntries.map(e=>e.username))].sort();
+  repNames.forEach((r,i) => { repColors[r] = repColorList[i % repColorList.length]; });
+
+  html += `<div style="margin-top:16px;">
+    <div style="font-size:0.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:8px;">Rep Breakdown — Last 4 Periods</div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
+      <thead><tr style="border-bottom:2px solid var(--border2);">
+        <th style="text-align:left;padding:6px;color:var(--text3);font-size:0.65rem;font-weight:800;text-transform:uppercase;">Period</th>
+        ${repNames.map(r=>`<th style="text-align:right;padding:6px;color:${repColors[r]};font-size:0.65rem;font-weight:800;text-transform:uppercase;">${r}</th>`).join('')}
+        <th style="text-align:right;padding:6px;color:var(--text3);font-size:0.65rem;font-weight:800;text-transform:uppercase;">Total</th>
+      </tr></thead>
+      <tbody>`;
+  recentBuckets.forEach(b => {
+    html += `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:7px 6px;font-weight:600;">${b.label}</td>`;
+    repNames.forEach(r => {
+      const cnt = _mgmtEntries.filter(e => e.username === r && e._date >= b.start && e._date <= b.end).length;
+      html += `<td style="text-align:right;padding:7px 6px;color:${repColors[r]};">${cnt}</td>`;
+    });
+    html += `<td style="text-align:right;padding:7px 6px;font-weight:700;">${b.cnt}</td></tr>`;
+  });
+  html += `</tbody></table></div></div>`;
+
+  body.innerHTML = html;
 }
 
 function rptChangeMonth(delta) {
