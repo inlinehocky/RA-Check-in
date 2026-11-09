@@ -1753,38 +1753,60 @@ async function toggleNewBizPanel() {
     ['nb-name','nb-contact','nb-phone','nb-addr','nb-city','nb-state','nb-zip','nb-lat','nb-lng','nb-zone-free'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('nb-type').value = '';
     // Zone hint
-    // Zone hint — fetch from user_zones
-    const { data: empZones } = await db.from('user_zones').select('zone_key').eq('username', currentUser.username);
-    const zoneKey = empZones && empZones.length ? empZones[0].zone_key : detectEmployeeZone();
-    const zoneObj = allZones.find(z => z.zone_key === zoneKey);
-    const info = document.getElementById('nb-zone-info');
-    if (zoneKey) {
-      const zoneName = zoneObj ? ` — ${zoneObj.zone_name}` : '';
-      info.textContent = `📍 Zone: ${zoneKey}${zoneName} (auto-assigned, cannot be changed)`;
-      info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--teal-dim);border-radius:8px;border:1px solid rgba(0,201,167,0.3);color:var(--teal);';
-    } else {
-      info.textContent = '⚠️ Zone could not be detected — make sure you have zones assigned';
-      info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--red-dim);border-radius:8px;border:1px solid rgba(255,92,92,0.3);color:var(--red);';
-    }
     modal.style.display = 'flex';
     document.body.style.overflow = 'hidden';
     setTimeout(() => document.getElementById('nb-name').focus(), 100);
-    // Populate zone dropdown
+    // Populate zone dropdown — filtered to rep's assigned zones when available
     const nbZoneSel = document.getElementById('nb-zone-select');
     nbZoneSel.innerHTML = '<option value="">— Select or type below —</option>';
     document.getElementById('nb-zone-free').value = '';
-    const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1).limit(10000);
-    const zones = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
-    zones.forEach(z => {
+    // Get zones from rep's actual assigned businesses (most accurate)
+    const { data: assignedBizRows } = await db.from('business_assignments')
+      .select('account_number').eq('username', currentUser.username);
+    const assignedAcctNums = (assignedBizRows || []).map(r => r.account_number);
+    let repZones = [];
+    if (assignedAcctNums.length) {
+      const { data: assignedBizZones } = await db.from('businesses')
+        .select('zone').in('account_number', assignedAcctNums).not('zone','is',null).eq('active_ind',1);
+      repZones = [...new Set((assignedBizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
+    }
+    // Fallback: all active zones if rep has no assignments
+    let zonesToShow = repZones;
+    if (!zonesToShow.length) {
+      const { data: bizZones } = await db.from('businesses').select('zone').not('zone','is',null).eq('active_ind',1).limit(10000);
+      zonesToShow = [...new Set((bizZones||[]).map(b=>b.zone).filter(Boolean))].sort();
+    }
+    zonesToShow.forEach(z => {
       const o = document.createElement('option');
       o.value = z;
       const zObj = allZones.find(az => z.toUpperCase().startsWith(az.zone_key.toUpperCase()));
       o.textContent = zObj ? `${z} — ${zObj.zone_name}` : z;
       nbZoneSel.appendChild(o);
     });
-    // Pre-select employee's zone if detectable
-    const detectedZone = await detectEmployeeZoneFromDB();
-    if (detectedZone) nbZoneSel.value = detectedZone;
+    // Auto-select: use most common zone among assigned businesses
+    if (repZones.length) {
+      const freq = {};
+      (assignedBizRows || []).forEach(r => {
+        const biz = (allBusinesses || []).find(b => b.account_number === r.account_number);
+        if (biz && biz.zone) freq[biz.zone] = (freq[biz.zone]||0) + 1;
+      });
+      const topZone = Object.keys(freq).length
+        ? Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0]
+        : repZones[0];
+      if (topZone) nbZoneSel.value = topZone;
+    }
+    // Zone info banner — read from the dropdown after it's populated
+    const selectedZone = nbZoneSel.value;
+    const info = document.getElementById('nb-zone-info');
+    if (selectedZone) {
+      const zObj = allZones.find(z => selectedZone.toUpperCase().startsWith(z.zone_key.toUpperCase()));
+      const zoneName = zObj ? ` — ${zObj.zone_name}` : '';
+      info.textContent = `📍 Zone: ${selectedZone}${zoneName} (auto-assigned, cannot be changed)`;
+      info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--teal-dim);border-radius:8px;border:1px solid rgba(0,201,167,0.3);color:var(--teal);';
+    } else {
+      info.textContent = '⚠️ Zone could not be detected — make sure you have zones assigned';
+      info.style.cssText = 'font-size:0.78rem;font-weight:600;margin-bottom:14px;padding:10px 14px;background:var(--red-dim);border-radius:8px;border:1px solid rgba(255,92,92,0.3);color:var(--red);';
+    }
   }
 }
 
